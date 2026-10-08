@@ -1,0 +1,298 @@
+{
+"candy": [
+13,
+9
+],
+"jack": [
+12,
+23
+],
+"jack2": [
+10,
+19
+],
+"w_shovel0": [
+-7,
+93
+],
+"w_shovel1": [
+-29,
+96
+],
+"zombie_dead": [
+44,
+36
+],
+"w_shovel2": [
+46,
+66
+],
+"zombie_walk1": [
+16,
+82
+],
+"zombie_walk2": [
+16,
+82
+],
+"zombie_pain": [
+24,
+79
+],
+"zombie_attack": [
+23,
+89
+],
+"scarecrow_walk1": [
+37,
+104
+],
+"zombie_fall": [
+47,
+69
+],
+"scarecrow_walk2": [
+37,
+104
+],
+"scarecrow_attack": [
+35,
+104
+],
+"scarecrow_pain": [
+32,
+103
+],
+"scarecrow_fall": [
+55,
+89
+],
+"witch_walk1": [
+19,
+100
+],
+"scarecrow_dead": [
+60,
+44
+],
+"witch_walk2": [
+19,
+100
+],
+"witch_attack": [
+19,
+100
+],
+"witch_pain": [
+22,
+99
+],
+"witch_fall": [
+55,
+78
+],
+"witch_dead": [
+60,
+33
+],
+"wraith_walk1": [
+24,
+80
+],
+"wraith_walk2": [
+24,
+80
+],
+"wraith_attack": [
+24,
+80
+],
+"wraith_pain": [
+32,
+80
+],
+"wraith_dead": [
+23,
+12
+],
+"wraith_fall": [
+32,
+63
+],
+"boss_walk1": [
+47,
+142
+],
+"boss_walk2": [
+47,
+142
+],
+"boss_pain": [
+47,
+140
+],
+"boss_attack": [
+54,
+148
+],
+"boss_dead": [
+74,
+65
+],
+"bucket": [
+9,
+25
+],
+"brew": [
+8,
+22
+],
+"armor": [
+12,
+29
+],
+"bullets": [
+7,
+11
+],
+"shells": [
+6,
+8
+],
+"pumpkins": [
+10,
+15
+],
+"pk_shotgun": [
+26,
+8
+],
+"pk_tommy": [
+23,
+9
+],
+"pk_launcher": [
+20,
+13
+],
+"key_red": [
+4,
+24
+],
+"key_blue": [
+4,
+24
+],
+"key_gold": [
+4,
+24
+],
+"candles": [
+11,
+23
+],
+"boss_fall": [
+74,
+138
+],
+"tree": [
+14,
+116
+],
+"tomb2": [
+13,
+46
+],
+"tomb": [
+13,
+44
+],
+"keg": [
+13,
+36
+],
+"cauldron": [
+15,
+23
+],
+"skulls": [
+16,
+15
+],
+"lamp": [
+7,
+137
+],
+"patch": [
+20,
+17
+],
+"fireball1": [
+7,
+16
+],
+"fireball2": [
+9,
+16
+],
+"greenball1": [
+8,
+15
+],
+"greenball2": [
+8,
+16
+],
+"pbomb": [
+6,
+14
+],
+"hanging": [
+11,
+97
+],
+"gibs": [
+27,
+7
+],
+"w_revolver0": [
+12,
+54
+],
+"w_revolver1": [
+27,
+60
+],
+"w_shotgun0": [
+33,
+53
+],
+"w_shotgun2": [
+62,
+96
+],
+"w_shotgun1": [
+27,
+56
+],
+"w_tommy0": [
+15,
+50
+],
+"w_tommy1": [
+21,
+59
+],
+"w_tommy2": [
+18,
+50
+],
+"w_launcher0": [
+7,
+61
+],
+"w_launcher1": [
+19,
+59
+]
+}

@@ -1,0 +1,69 @@
+# BUTCH GRAVES 3D - sound configuration
+# Format:  key = /path/in/jar.ext   (leave empty or delete a line to silence it)
+# Supported types depend on the phone: .mid .wav .amr .mp3 (mime type from the extension).
+# To use your own sounds: copy the files into the JAR (it's a ZIP, use 7-Zip/WinRAR),
+# then point the keys below at them. If you install with the .jad, update its
+# MIDlet-Jar-Size to the new JAR size (or install the .jar alone).
+
+# ---- music (looped) ----
+music.title   = /snd/m_title.mid
+music.story   = /snd/m_story.mid
+music.level1  = /snd/m_level1.mid
+music.level2  = /snd/m_level2.mid
+music.level3  = /snd/m_level3.mid
+music.level4  = /snd/m_boss.mid
+music.win     = /snd/m_win.mid
+music.dead    = /snd/m_dead.mid
+
+# ---- weapons ----
+sfx.revolver  = /snd/s_revolver.wav
+sfx.shotgun   = /snd/s_shotgun.wav
+sfx.reload    = /snd/s_reload.wav
+sfx.tommy     = /snd/s_tommy.wav
+sfx.launch    = /snd/s_launch.wav
+sfx.explode   = /snd/s_explode.wav
+sfx.swing     = /snd/s_swing.wav
+sfx.hit       = /snd/s_hit.wav
+
+# ---- world ----
+sfx.door      = /snd/s_door.wav
+sfx.pickup    = /snd/s_pickup.wav
+sfx.wpick     = /snd/s_wpick.wav
+sfx.key       = /snd/s_key.wav
+sfx.hurt      = /snd/s_hurt.wav
+sfx.fireball  = /snd/s_fireball.wav
+sfx.mdie      = /snd/s_mdie.wav
+sfx.thunder   = /snd/s_thunder.wav
+sfx.click     = /snd/s_click.wav
+sfx.switch    = /snd/s_switch.wav
+sfx.secret    = /snd/s_secret.wav
+
+# ---- monsters ----
+sfx.zombie    = /snd/s_zombie.wav
+sfx.scare     = /snd/s_scare.wav
+sfx.witch     = /snd/s_witch.wav
+sfx.ghost     = /snd/s_ghost.wav
+sfx.boss      = /snd/s_boss.wav
+sfx.bossdie   = /snd/s_bossdie.wav
+
+# ---- Butch's voice lines ----
+voice.start1  = /snd/v_start1.wav
+voice.start2  = /snd/v_start2.wav
+voice.kill1   = /snd/v_kill1.wav
+voice.kill2   = /snd/v_kill2.wav
+voice.kill3   = /snd/v_kill3.wav
+voice.ghost   = /snd/v_ghost.wav
+voice.pumpkin = /snd/v_pumpkin.wav
+voice.shovel  = /snd/v_shovel.wav
+voice.gib     = /snd/v_gib.wav
+voice.weapon  = /snd/v_weapon.wav
+voice.launcher= /snd/v_launcher.wav
+voice.health  = /snd/v_health.wav
+voice.lowhp   = /snd/v_lowhp.wav
+voice.secret  = /snd/v_secret.wav
+voice.boss    = /snd/v_boss.wav
+voice.win     = /snd/v_win.wav
+voice.level   = /snd/v_level.wav
+voice.pain1   = /snd/v_pain1.wav
+voice.pain2   = /snd/v_pain2.wav
+voice.die     = /snd/v_die.wav

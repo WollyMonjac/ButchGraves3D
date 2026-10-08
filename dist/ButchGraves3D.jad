@@ -1,0 +1,11 @@
+MIDlet-1: Butch Graves 3D,/icon.png,BG
+MIDlet-Name: Butch Graves 3D
+MIDlet-Vendor: Butch Graves Team
+MIDlet-Version: 1.0.0
+MIDlet-Icon: /icon.png
+MIDlet-Description: Halloween FPS - Night of the Pumpkin King
+MIDlet-Jar-URL: ButchGraves3D.jar
+MIDlet-Jar-Size: 502438
+MicroEdition-Configuration: CLDC-1.0
+MicroEdition-Profile: MIDP-2.0
+Nokia-MIDlet-Category: Game
