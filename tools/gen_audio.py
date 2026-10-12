@@ -111,17 +111,29 @@ VOICE = [
 
 
 def voice(vid, text, v, speed, pitch, pf):
+    """Butch's lines: espeak-ng/MBROLA (mb-us2) through ffmpeg: pitch down by pf, telephone EQ, hard compression, a short
+    slap echo, then a little distortion. (BG_BUTCH=kokoro tries the neural TTS instead; it was tried and Butch sounded
+    worse, so the MBROLA voice stays the default.)"""
+    import tts
     with tempfile.TemporaryDirectory() as td:
         raw = os.path.join(td, 'r.wav')
-        subprocess.run(['espeak-ng', '-v', v, '-s', str(speed), '-p', str(pitch), '-g', '2', text, '-w', raw], check=True,
-                       stderr=subprocess.DEVNULL)
+        if os.environ.get('BG_BUTCH', '') == 'kokoro' and tts.available():
+            ksp = 1.0 if speed >= 135 else 0.92 if speed >= 120 else 0.85
+            tts.say(text, tts.BUTCH, ksp, raw)
+            with wave.open(raw) as w:
+                sr_in = w.getframerate()
+            tempo = 1.04 / pf
+        else:
+            subprocess.run(['espeak-ng', '-v', v, '-s', str(speed), '-p', str(pitch), '-g', '2', text, '-w', raw], check=True,
+                           stderr=subprocess.DEVNULL)
+            sr_in = 16000
+            tempo = 1.12 / pf
         out = os.path.join(td, 'o.wav')
-        sr_in = 16000
         flt = ('silenceremove=start_periods=1:start_threshold=-42dB:stop_periods=-1:stop_duration=0.25:stop_threshold=-42dB,'
                'asetrate=%d,aresample=16000,atempo=%.3f,highpass=f=110,lowpass=f=3600,'
                'acompressor=threshold=-22dB:ratio=5:attack=4:release=80:makeup=7,'
                'aecho=0.85:0.5:24:0.16,volume=1.4,'
-               'silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-38dB' % (int(sr_in * pf), 1.12 / pf))
+               'silenceremove=stop_periods=-1:stop_duration=0.12:stop_threshold=-38dB' % (int(sr_in * pf), tempo))
         subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', raw, '-af', flt, '-ar', str(SR), '-ac', '1', '-f', 'wav',
                         '-acodec', 'pcm_s16le', out], check=True)
         with wave.open(out) as w:
@@ -131,17 +143,44 @@ def voice(vid, text, v, speed, pitch, pf):
 
 
 def monster_voice(vid, text, v, speed, pitch, pf, fx):
+    """Character voices. v = 'k:<kokoro voice or blend>' uses the neural TTS (if available), anything else espeak-ng."""
+    import tts
     with tempfile.TemporaryDirectory() as td:
         raw = os.path.join(td, 'r.wav')
-        subprocess.run(['espeak-ng', '-v', v, '-s', str(speed), '-p', str(pitch), text, '-w', raw], check=True,
-                       stderr=subprocess.DEVNULL)
+        if v.startswith('k:') and tts.available():
+            tts.say(text, v[2:], min(1.5, max(0.8, speed / 130.0)), raw)
+        else:
+            if v.startswith('k:'):
+                v = {'k:bm_george': 'en-us+m3', 'k:af_sky': 'en-us+f5'}.get(v, 'mb-us3')
+            subprocess.run(['espeak-ng', '-v', v, '-s', str(speed), '-p', str(pitch), text, '-w', raw], check=True,
+                           stderr=subprocess.DEVNULL)
         out = os.path.join(td, 'o.wav')
         with wave.open(raw) as w:
             sr_in = w.getframerate()
-        flt = ('silenceremove=start_periods=1:start_threshold=-40dB:stop_periods=-1:stop_duration=0.2:stop_threshold=-40dB,'
-               'asetrate=%d,aresample=16000,%s' % (int(sr_in * pf), fx))
-        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', raw, '-af', flt, '-ar', str(SR), '-ac', '1', '-f', 'wav',
-                        '-acodec', 'pcm_s16le', out], check=True)
+        # ffmpeg 6.1's vibrato filter emits garbage (NaN/-inf) samples that turn every IIR filter after it into a
+        # full-scale buzz, so the vibrato is done here in numpy between two ffmpeg passes
+        parts = fx.split(',')
+        vi = [i for i, f in enumerate(parts) if f.startswith('vibrato=')]
+        pre, post = (parts[:vi[0]], parts[vi[0] + 1:]) if vi else (parts, [])
+        flt = ','.join(['silenceremove=start_periods=1:start_threshold=-40dB:stop_periods=-1:stop_duration=0.2:'
+                        'stop_threshold=-40dB', 'asetrate=%d' % int(sr_in * pf), 'aresample=16000'] + pre)
+        ffw = lambda i, o, af, sr: subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', i, '-af', af, '-ar', str(sr),
+                                                  '-ac', '1', '-f', 'wav', '-acodec', 'pcm_s16le', o], check=True)
+        if vi:
+            mid = os.path.join(td, 'm.wav')
+            ffw(raw, mid, flt, 16000)
+            with wave.open(mid) as w:
+                x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(float)
+            kv = dict(p.split('=') for p in parts[vi[0]][8:].split(':'))
+            n = np.arange(len(x))
+            delay = float(kv.get('d', 0.5)) * 0.005 * 16000 * (1 + np.sin(2 * np.pi * float(kv.get('f', 5)) * n / 16000)) / 2
+            x = np.interp(n - delay, n, x, left=0)
+            with wave.open(mid, 'wb') as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+                w.writeframes(np.clip(np.round(x), -32768, 32767).astype(np.int16).tobytes())
+            ffw(mid, out, ','.join(post) or 'anull', SR)
+        else:
+            ffw(raw, out, flt, SR)
         with wave.open(out) as w:
             d = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(float) / 32768
     return d
@@ -262,9 +301,10 @@ def sfx():
     z = monster_voice('s_scare', 'heh heh heh heh', 'en+m7', 170, 70, 0.8,
                       'flanger=delay=3:depth=4,lowpass=f=3000,aecho=0.8:0.5:40:0.2')
     sz['s_scare'] = save_wav('s_scare.wav', dist(z * 1.3, 2.0), 0.9)
-    z = monster_voice('s_witch', 'hee hee hee hee hee', 'en+f4', 190, 95, 1.1,
-                      'aecho=0.8:0.55:35|70:0.3|0.15,lowpass=f=3600')
-    sz['s_witch'] = save_wav('s_witch.wav', z, 0.9)
+    # witch: an old crone's croon (only when she spots you; her spell uses the fireball whoosh)
+    z = monster_voice('s_witch', 'Come here, dearie.', 'k:bf_emma', 135, 50, 0.9,
+                      'vibrato=f=6:d=0.15,highpass=f=150,lowpass=f=3400,aecho=0.8:0.45:45:0.25')
+    sz['s_witch'] = save_wav('s_witch.wav', pad(dist(z * 1.2, 1.3), 0.03), 0.7)
     z = monster_voice('s_ghost', 'whooooooooo', 'en+f2', 60, 60, 1.0,
                       'vibrato=f=5:d=0.6,flanger=delay=5:depth=6,aecho=0.8:0.7:90|180:0.4|0.25,lowpass=f=2500')
     sz['s_ghost'] = save_wav('s_ghost.wav', z, 0.85)
@@ -678,20 +718,43 @@ def m_story():
 
 
 def m_win():
+    """Level clear: a short spooky-lounge jingle (vibraphone tune over harpsichord, organ, bass and brushed drums) in
+    E minor that lands on E major. Kept as quiet as the cutscene music: it plays over the tally screen."""
     Q = PPQ
-    org = Track(0, 19, 110, 64, 90)
-    tr = Track(1, 56, 104, 60, 60)
-    choir = Track(2, 52, 90, 64, 90)
-    timp = Track(3, 47, 110, 64, 60)
-    seq(tr, 0, 'D5:0.5 D5:0.5 D5:0.5 A4:0.5 D5:1 F#5:1 A5:3 r:1 G5:0.5 F#5:0.5 E5:1 F#5:0.5 G5:0.5 A5:4', Q, 108)
-    for (t, ch, d_) in ((0, ('D', 'F#', 'A'), 4), (4, ('G', 'B', 'D'), 2), (6, ('A', 'C#', 'E'), 2), (8, ('D', 'F#', 'A'), 4)):
-        for nm in ch:
-            org.note(t * Q, d_ * Q, n2m(nm + '4'), 96)
-            choir.note(t * Q, d_ * Q, n2m(nm + '4'), 84)
-        timp.note(t * Q, Q // 2, n2m('D3'), 120)
-    for k in range(8):
-        timp.note(10 * Q + k * Q // 4, Q // 4, n2m('D3'), 70 + k * 6)
-    return write_midi('m_win.mid', [org, tr, choir, timp], 100, end=12 * Q)
+    vib = Track(0, 11, 94, 70, 60)
+    hps = Track(1, 6, 64, 44, 40)
+    org = Track(2, 16, 44, 64, 70)
+    bass = Track(3, 33, 84, 64, 20)
+    choir = Track(4, 52, 50, 64, 90)
+    cel = Track(5, 8, 56, 90, 80)
+    d = Track(9, None, 64, 64, 30)
+    seq(vib, 0, 'B4:0.5 E5:0.5 G5:0.5 B5:0.5 A5:1 G5:1 '
+                'E5:0.5 G5:0.5 C6:1 B5:0.5 A5:0.5 G5:1 '
+                'A5:0.5 C6:0.5 B5:0.5 A5:0.5 F#5:1 D#5:1 '
+                'E5:1.5 G5:0.5 F#5:0.5 E5:0.5 B4:1 '
+                'C5:0.5 E5:0.5 G5:0.5 C6:0.5 B5:1 A5:0.5 F#5:0.5 '
+                'G#5:0.5 B5:0.5 E6:3', Q, 78, 0.85)
+    arps = {'Em': 'E3 B3 E4 G4', 'C': 'C3 G3 C4 E4', 'Am': 'A2 E3 A3 C4', 'B7': 'B2 F#3 A3 D#4'}
+    pads = {'Em': 'E4+G4+B4', 'C': 'E4+G4+C5', 'Am': 'E4+A4+C5', 'B7': 'D#4+F#4+A4'}
+    halves = ['Em', 'Em', 'C', 'C', 'Am', 'B7', 'Em', 'Em', 'C', 'B7']
+    for k, ch in enumerate(halves):
+        seq(hps, k * 2 * Q, ' '.join(n + ':0.5' for n in arps[ch].split()), Q, 58, 0.9)
+        seq(org, k * 2 * Q, pads[ch] + ':2', Q, 52, 0.95)
+    seq(hps, 20 * Q, 'E3+B3+E4+G#4+B4:4', Q, 64, 1.0)
+    seq(org, 20 * Q, 'E4+G#4+B4:4', Q, 56, 1.0)
+    seq(bass, 0, 'E2:1 r:0.5 E2:0.5 B1:1 D2:1 C2:1 r:0.5 C2:0.5 G1:1 B1:1 A1:1 C2:1 B1:1 D#2:1 '
+                 'E2:1 r:0.5 E2:0.5 B1:1 D2:1 C2:1 E2:1 B1:1 F#1:1 E2:4', Q, 84, 0.8)
+    seq(choir, 20 * Q, 'E4+G#4+B4:4', Q, 58, 1.0)
+    seq(cel, 20 * Q, 'E6:0.25 G#6:0.25 B6:0.25 E7:2.25', Q, 60, 1.0)
+    for b in range(5):
+        t = b * 4 * Q
+        for j in range(8):
+            d.note(t + j * Q // 2, Q // 4, 42, 34 + (j % 2 == 0) * 10)
+        d.note(t, Q // 2, 36, 66); d.note(t + 2 * Q, Q // 2, 36, 60)
+        d.note(t + Q, Q // 2, 37, 50); d.note(t + 3 * Q, Q // 2, 37, 50)
+    d.note(19 * Q, Q // 2, 47, 52); d.note(19 * Q + Q // 2, Q // 2, 45, 58)
+    d.note(20 * Q, 2 * Q, 49, 62); d.note(20 * Q, Q, 36, 72)
+    return write_midi('m_win.mid', [vib, hps, org, bass, choir, cel, d], 132, end=26 * Q)
 
 
 def m_dead():

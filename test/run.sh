@@ -2,6 +2,7 @@
 # usage: run.sh script.txt outdir W H
 SCRIPT=$1; OUT=$2; W=${3:-240}; H=${4:-320}
 rm -rf $OUT; mkdir -p $OUT
+[ -n "$KEEP_RMS" ] || rm -rf /home/claude/tc/harness/rms/*
 sed "s#@OUT#$OUT#g" $SCRIPT > $OUT/_script.txt
 cd /home/claude/tc/harness
 JAVA_TOOL_OPTIONS= timeout 180 /home/claude/tc/jdk8u422-b05/bin/java -Djava.awt.headless=true -cp /home/claude/tc/freej2me/freej2me-lib.jar:. Harness /home/claude/bg/dist/ButchGraves3D.jar $W $H $OUT/_script.txt 2>&1 | grep -v -E "Picked up|MIDlet-1|Create" | tail -8

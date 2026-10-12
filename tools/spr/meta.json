@@ -257,42 +257,954 @@
 ],
 "w_revolver0": [
 12,
-54
+58
 ],
 "w_revolver1": [
-27,
-60
+28,
+63
 ],
 "w_shotgun0": [
-33,
-53
+41,
+57
 ],
 "w_shotgun2": [
-62,
-96
+60,
+81
 ],
 "w_shotgun1": [
-27,
-56
+35,
+60
 ],
 "w_tommy0": [
-15,
-50
+18,
+52
 ],
 "w_tommy1": [
 21,
-59
+61
 ],
 "w_tommy2": [
 18,
-50
+51
 ],
 "w_launcher0": [
-7,
-61
+23,
+68
 ],
 "w_launcher1": [
 19,
-59
+63
+],
+"skel_walk1": [
+15,
+93
+],
+"skel_walk2": [
+15,
+93
+],
+"skel_pain": [
+29,
+104
+],
+"skel_attack": [
+20,
+135
+],
+"skel_dead": [
+17,
+13
+],
+"skel_fall": [
+55,
+107
+],
+"clown_walk1": [
+28,
+106
+],
+"clown_walk2": [
+28,
+102
+],
+"clown_attack": [
+31,
+110
+],
+"clown_pain": [
+28,
+86
+],
+"clown_fall": [
+59,
+78
+],
+"clown_dead": [
+52,
+40
+],
+"wolf_walk1": [
+35,
+97
+],
+"wolf_walk2": [
+35,
+97
+],
+"wolf_attack": [
+39,
+104
+],
+"wolf_pain": [
+41,
+100
+],
+"wolf_fall": [
+70,
+90
+],
+"bat_walk1": [
+27,
+33
+],
+"bat_walk2": [
+25,
+27
+],
+"bat_attack": [
+24,
+27
+],
+"wolf_dead": [
+65,
+51
+],
+"bat_pain": [
+27,
+33
+],
+"bat_fall": [
+23,
+27
+],
+"bat_dead": [
+25,
+9
+],
+"vamp_walk1": [
+17,
+81
+],
+"vamp_walk2": [
+16,
+81
+],
+"vamp_attack": [
+19,
+81
+],
+"vamp_pain": [
+17,
+80
+],
+"vamp_dead": [
+20,
+11
+],
+"vamp_fall": [
+19,
+61
+],
+"giggles_walk1": [
+43,
+159
+],
+"giggles_walk2": [
+43,
+159
+],
+"giggles_pain": [
+51,
+156
+],
+"giggles_attack": [
+51,
+159
+],
+"giggles_fall": [
+82,
+142
+],
+"giggles_dead": [
+74,
+75
+],
+"count_walk1": [
+27,
+115
+],
+"count_walk2": [
+26,
+115
+],
+"count_pain": [
+29,
+113
+],
+"count_attack": [
+54,
+122
+],
+"count_dead": [
+30,
+11
+],
+"knife1": [
+10,
+8
+],
+"knife2": [
+3,
+16
+],
+"bolt1": [
+4,
+10
+],
+"bolt2": [
+7,
+10
+],
+"jball": [
+6,
+16
+],
+"streetlamp": [
+6,
+127
+],
+"balloons": [
+21,
+93
+],
+"carousel": [
+28,
+126
+],
+"count_fall": [
+29,
+89
+],
+"hydrant": [
+10,
+31
+],
+"trashcan": [
+11,
+42
+],
+"wreck": [
+42,
+51
+],
+"cotton": [
+27,
+75
+],
+"bulbs": [
+48,
+89
+],
+"strongman": [
+16,
+137
+],
+"candelabra": [
+17,
+96
+],
+"clownhead": [
+30,
+72
+],
+"coffin": [
+17,
+87
+],
+"tesla": [
+25,
+97
+],
+"tank": [
+20,
+98
+],
+"knight": [
+20,
+119
+],
+"cage": [
+15,
+97
+],
+"brazier": [
+14,
+82
+],
+"reeds": [
+16,
+57
+],
+"gargoyle": [
+27,
+90
+],
+"butch_stand": [
+29,
+108
+],
+"cypress": [
+32,
+138
+],
+"butch_walk1": [
+29,
+109
+],
+"butch_wind": [
+22,
+117
+],
+"butch_walk2": [
+30,
+108
+],
+"butch_swing": [
+42,
+102
+],
+"cs_pkhead": [
+20,
+39
+],
+"butch_aim": [
+23,
+142
+],
+"cs_pkhead2": [
+20,
+39
+],
+"cs_kid": [
+11,
+51
+],
+"cs_kid2": [
+18,
+51
+],
+"cs_balloon": [
+7,
+38
+],
+"cs_car": [
+25,
+44
+],
+"cs_cbat1": [
+27,
+33
+],
+"cs_star": [
+7,
+17
+],
+"cs_cbat2": [
+25,
+27
+],
+"frank_walk1": [
+36,
+110
+],
+"frank_walk2": [
+36,
+110
+],
+"frank_attack": [
+31,
+110
+],
+"frank_pain": [
+42,
+109
+],
+"frank_fall": [
+65,
+103
+],
+"drone_walk1": [
+23,
+34
+],
+"drone_walk2": [
+27,
+34
+],
+"drone_attack": [
+23,
+34
+],
+"drone_pain": [
+25,
+37
+],
+"drone_fall": [
+23,
+40
+],
+"drone_dead": [
+21,
+14
+],
+"frank_dead": [
+69,
+55
+],
+"cyborg_walk2": [
+16,
+82
+],
+"cyborg_walk1": [
+16,
+82
+],
+"cyborg_pain": [
+24,
+80
+],
+"cyborg_attack": [
+23,
+101
+],
+"cyborg_fall": [
+47,
+70
+],
+"spider_walk1": [
+27,
+25
+],
+"cyborg_dead": [
+44,
+47
+],
+"spider_walk2": [
+27,
+25
+],
+"spider_attack": [
+27,
+31
+],
+"spider_pain": [
+25,
+27
+],
+"spider_fall": [
+22,
+36
+],
+"spider_dead": [
+29,
+18
+],
+"prime_walk1": [
+58,
+166
+],
+"prime_walk2": [
+58,
+166
+],
+"prime_pain": [
+73,
+166
+],
+"prime_attack": [
+63,
+183
+],
+"prime_dead": [
+77,
+95
+],
+"zap1": [
+12,
+18
+],
+"zap2": [
+12,
+17
+],
+"laser1": [
+8,
+7
+],
+"laser2": [
+8,
+7
+],
+"holotomb": [
+13,
+52
+],
+"neonjack": [
+20,
+91
+],
+"crate": [
+17,
+34
+],
+"toxic": [
+11,
+38
+],
+"robotarm": [
+16,
+88
+],
+"capsule": [
+17,
+98
+],
+"terminal": [
+15,
+69
+],
+"prime_fall": [
+99,
+163
+],
+"telepad": [
+31,
+47
+],
+"cables": [
+11,
+98
+],
+"butch_carry": [
+25,
+118
+],
+"butch_cwalk1": [
+25,
+118
+],
+"butch_cwalk2": [
+25,
+118
+],
+"butch_point": [
+32,
+102
+],
+"cs_doc": [
+16,
+83
+],
+"cs_docrant": [
+21,
+83
+],
+"cs_docrun1": [
+17,
+83
+],
+"butch_shrug": [
+37,
+113
+],
+"cs_minibot1": [
+9,
+22
+],
+"cs_minibot2": [
+9,
+22
+],
+"cs_portal1": [
+32,
+89
+],
+"cs_docrun2": [
+17,
+83
+],
+"cs_portal2": [
+32,
+90
+],
+"cs_wreck": [
+39,
+47
+],
+"cpbutch_1": [
+56,
+140
+],
+"cpbutch_2": [
+56,
+140
+],
+"cppk_1": [
+48,
+106
+],
+"cppk_2": [
+48,
+106
+],
+"cpkid_1": [
+35,
+109
+],
+"cpkid_2": [
+54,
+98
+],
+"cpbutch_3": [
+56,
+140
+],
+"cpgig_1": [
+60,
+120
+],
+"cpgig_2": [
+60,
+120
+],
+"cpcount_1": [
+60,
+83
+],
+"cpcount_2": [
+60,
+81
+],
+"cpdoc_1": [
+48,
+119
+],
+"cpdoc_2": [
+55,
+119
+],
+"cs_pksmash": [
+33,
+20
+],
+"cs_nose": [
+4,
+8
+],
+"cs_goggles": [
+8,
+5
+],
+"butch_kick": [
+42,
+118
+],
+"cpgore_1": [
+56,
+140
+],
+"cpgore_2": [
+56,
+140
+],
+"mummy_walk2": [
+18,
+86
+],
+"mummy_walk1": [
+18,
+86
+],
+"mummy_attack": [
+17,
+86
+],
+"mummy_pain": [
+29,
+85
+],
+"mummy_fall": [
+55,
+73
+],
+"mummy_dead": [
+48,
+36
+],
+"jaguar_walk1": [
+25,
+102
+],
+"jaguar_walk2": [
+25,
+102
+],
+"jaguar_attack": [
+27,
+117
+],
+"jaguar_pain": [
+30,
+100
+],
+"jaguar_fall": [
+64,
+85
+],
+"jaguar_dead": [
+61,
+51
+],
+"conq_walk1": [
+18,
+103
+],
+"conq_walk2": [
+18,
+103
+],
+"conq_attack": [
+17,
+103
+],
+"conq_pain": [
+17,
+102
+],
+"conq_dead": [
+29,
+16
+],
+"weeper_walk1": [
+23,
+78
+],
+"weeper_walk2": [
+15,
+78
+],
+"conq_fall": [
+51,
+89
+],
+"weeper_attack": [
+18,
+80
+],
+"weeper_pain": [
+26,
+77
+],
+"weeper_dead": [
+29,
+5
+],
+"weeper_fall": [
+26,
+58
+],
+"seven_walk1": [
+41,
+200
+],
+"seven_walk2": [
+41,
+200
+],
+"seven_pain": [
+58,
+195
+],
+"seven_attack": [
+45,
+227
+],
+"seven_dead": [
+50,
+22
+],
+"dart1": [
+10,
+6
+],
+"dart2": [
+10,
+6
+],
+"shot1": [
+10,
+8
+],
+"shot2": [
+10,
+8
+],
+"disc1": [
+7,
+11
+],
+"disc2": [
+6,
+10
+],
+"rock": [
+5,
+12
+],
+"idol": [
+7,
+24
+],
+"boulder_1": [
+44,
+87
+],
+"boulder_2": [
+44,
+87
+],
+"kapok": [
+32,
+153
+],
+"palm": [
+28,
+118
+],
+"fern": [
+24,
+21
+],
+"olmec": [
+32,
+68
+],
+"jstatue": [
+15,
+60
+],
+"rack": [
+30,
+62
+],
+"ofrenda": [
+26,
+62
+],
+"torch": [
+6,
+78
+],
+"pillar": [
+12,
+88
+],
+"gold": [
+22,
+20
+],
+"tent": [
+55,
+50
+],
+"vines": [
+20,
+97
+],
+"cs_crane": [
+18,
+84
+],
+"cs_cranerant": [
+19,
+98
+],
+"cs_cranerun1": [
+19,
+83
+],
+"cs_cranerun2": [
+19,
+83
+],
+"cs_cranemelt1": [
+19,
+100
+],
+"cs_cranemelt2": [
+19,
+103
+],
+"cs_shrunk": [
+7,
+13
+],
+"cs_jskull": [
+6,
+13
+],
+"cs_rubble": [
+30,
+15
+],
+"cpcrane_1": [
+54,
+109
+],
+"seven_fall": [
+100,
+201
+],
+"cpcrane_2": [
+55,
+120
+],
+"cpmelt_1": [
+55,
+120
+],
+"cpmelt_2": [
+55,
+120
+],
+"cpseven_1": [
+60,
+120
+],
+"cpseven_2": [
+60,
+120
+],
+"cs_cranebones": [
+23,
+11
+],
+"cpshrunk_1": [
+41,
+76
+],
+"cpshrunk_2": [
+41,
+76
 ]
 }

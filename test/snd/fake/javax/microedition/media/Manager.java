@@ -6,10 +6,12 @@ import java.io.InputStream;
 public final class Manager {
     public static volatile String nextName = "?";   // set by the test's G.open()
     public static int createDelayWav = 40, createDelayMidi = 250;
+    public static int wavCreates;                   // sampled players created (the churn real phones choke on)
 
     public static Player createPlayer(InputStream in, String type) throws java.io.IOException, MediaException {
         String n = nextName;
         boolean midi = type.indexOf("midi") >= 0;
+        if (!midi) wavCreates++;
         FakePlayer.sleep(midi ? createDelayMidi / 3 : createDelayWav / 3);
         return new FakePlayer(n, midi);
     }

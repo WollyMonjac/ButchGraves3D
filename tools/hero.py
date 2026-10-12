@@ -35,7 +35,7 @@ def head(expr='smirk', blood=0, look=0.0):
         ps.append(P(Ellipsoid((s * 0.08, 0.0, -0.005), (0.012, 0.025, 0.018)), sk, 0.01))          # ears
         ps.append(P(Ellipsoid((s * 0.045, -0.025, 0.06), (0.025, 0.015, 0.02)), sk, 0.02))         # cheekbones
     # brow ridge
-    brow_drop = {'smirk': 0.0, 'grin': 0.004, 'hurt': -0.006, 'ouch': -0.01, 'dead': 0.0}[expr]
+    brow_drop = {'smirk': 0.0, 'grin': 0.004, 'hurt': -0.006, 'ouch': -0.01, 'dead': 0.0, 'talk': 0.002}[expr]
     ps.append(P(Box((0, 0.035, 0.07), (0.058, 0.01, 0.014), r=0.008), sk, 0.02))
     # nose
     ps.append(P(Cone((0, 0.02, 0.08), (0, -0.025, 0.098), 0.01, 0.016), sk, 0.012))
@@ -50,12 +50,17 @@ def head(expr='smirk', blood=0, look=0.0):
             ps.append(P(Box(ec + np.array([0, 0, 0.004]), (0.01, 0.0015, 0.004), R=rot(0, 0, 0.6)), BLACK, 0.0))
             ps.append(P(Box(ec + np.array([0, 0, 0.004]), (0.01, 0.0015, 0.004), R=rot(0, 0, -0.6)), BLACK, 0.0))
         # thick eyebrows (angled: tough/angry)
-        ang = s * (0.25 if expr in ('smirk', 'grin') else -0.2)
+        ang = s * (0.25 if expr in ('smirk', 'grin', 'talk') else -0.2)
         ps.append(P(Box((s * 0.031, 0.034 + brow_drop, 0.083), (0.02, 0.005, 0.006), R=rot(0, 0, ang)), HAIR, 0.003))
     # mouth
     if expr == 'grin':
         ps.append(P(Ellipsoid((0.005, -0.058, 0.082), (0.03, 0.009, 0.02)), BLACK, 0.003, op='sub'))
         ps.append(P(Box((0.005, -0.054, 0.08), (0.026, 0.004, 0.006)), TEETH, 0.0))
+    elif expr == 'talk':       # mid-sentence: open mouth, lollipop still parked in the corner
+        ps.append(P(Ellipsoid((0.004, -0.061, 0.082), (0.022, 0.014, 0.02)), BLACK, 0.003, op='sub'))
+        ps.append(P(Box((0.004, -0.051, 0.08), (0.019, 0.0035, 0.006)), TEETH, 0.0))
+        ps.append(P(Cone((0.028, -0.057, 0.09), (0.058, -0.068, 0.112), 0.0028, 0.0028), WHITE, 0.0))
+        ps.append(P(Cyl((0.066, -0.071, 0.118), 0.02, 0.006, R=rot(np.pi / 2 - 0.3, 0.5, 0)), CANDY, 0.0))
     elif expr in ('hurt', 'ouch'):
         ps.append(P(Ellipsoid((0, -0.06, 0.082), (0.022, 0.008 if expr == 'hurt' else 0.012, 0.02)), BLACK, 0.003, op='sub'))
         ps.append(P(Box((0, -0.055, 0.079), (0.018, 0.003, 0.006)), TEETH, 0.0))
@@ -93,9 +98,9 @@ def head(expr='smirk', blood=0, look=0.0):
 FACES = [('face0', 'smirk', 0), ('face1', 'hurt', 1), ('face2', 'ouch', 2), ('facegrin', 'grin', 0), ('facedead', 'dead', 2)]
 
 
-def bust():
+def bust(expr='smirk', blood=0):
     """Title-screen hero: head plus shoulders, shotgun resting on the right shoulder."""
-    ps = head('smirk', 0)
+    ps = head(expr, blood)
     out = []
     for pr in ps:
         out.append(pr)

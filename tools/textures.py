@@ -721,3 +721,4 @@ FLATS = [
     ('checker', f_checker), ('slime', f_slime), ('lava', f_lava), ('ceilwood', f_ceilwood), ('ceilstone', f_ceilstone),
     ('bones', f_bones),
 ]
+SKIES = [('sky0', lambda: sky(0)), ('sky1', lambda: sky(1))]

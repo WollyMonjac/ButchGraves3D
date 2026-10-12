@@ -41,41 +41,155 @@ final class E {
         int na = in.readShort();
         ATAN = new short[na];
         for (int i = 0; i < na; i++) ATAN[i] = in.readShort();
-        int nt = in.readShort();
+        int nt = in.readShort(), ns = in.readShort(), ngr = in.readShort();
         tex = new byte[nt][];
         texW = new int[nt];
         texH = new int[nt];
-        for (int i = 0; i < nt; i++) {
-            int w = in.readShort(), h = in.readShort();
-            texW[i] = w;
-            texH[i] = h;
-            tex[i] = new byte[w * h];
-            in.readFully(tex[i]);
-        }
-        int ns = in.readShort();
         spr = new byte[ns][];
         sw = new short[ns]; sh = new short[ns]; sox = new short[ns]; soy = new short[ns];
         sTop = new short[ns][];
         sBot = new short[ns][];
-        for (int i = 0; i < ns; i++) {
-            int w = in.readShort(), h = in.readShort();
-            sw[i] = (short) w; sh[i] = (short) h;
-            sox[i] = in.readShort(); soy[i] = in.readShort();
-            byte[] d = new byte[w * h];
-            in.readFully(d);
-            spr[i] = d;
-            short[] t = new short[w], b = new short[w];
-            for (int x = 0; x < w; x++) {
-                int o = x * h, y0 = 0, y1 = h;
-                while (y0 < h && d[o + y0] == 0) y0++;
-                while (y1 > y0 && d[o + y1 - 1] == 0) y1--;
-                t[x] = (short) y0;
-                b[x] = (short) y1;
-            }
-            sTop[i] = t;
-            sBot[i] = b;
-        }
+        gLoaded = new boolean[ngr];
+        gIds = new int[ngr][];
+        int n = in.readShort();
+        for (int i = 0; i < n; i++) readTex(in, in.readShort());
+        n = in.readShort();
+        for (int i = 0; i < n; i++) readSpr(in, in.readShort());
         in.close();
+    }
+
+    static void readTex(DataInputStream in, int id) throws IOException {
+        int w = in.readShort(), h = in.readShort();
+        texW[id] = w;
+        texH[id] = h;
+        byte[] d = new byte[w * h];
+        in.readFully(d);
+        tex[id] = d;
+    }
+
+    static void readSpr(DataInputStream in, int i) throws IOException {
+        int w = in.readShort(), h = in.readShort();
+        sw[i] = (short) w; sh[i] = (short) h;
+        sox[i] = in.readShort(); soy[i] = in.readShort();
+        byte[] d = new byte[w * h];
+        in.readFully(d);
+        short[] t = new short[w], b = new short[w];
+        for (int x = 0; x < w; x++) {
+            int o = x * h, y0 = 0, y1 = h;
+            while (y0 < h && d[o + y0] == 0) y0++;
+            while (y1 > y0 && d[o + y1 - 1] == 0) y1--;
+            t[x] = (short) y0;
+            b[x] = (short) y1;
+        }
+        sTop[i] = t;
+        sBot[i] = b;
+        spr[i] = d;
+    }
+
+    // ------------------------------------------------------------------ asset groups (loaded per level)
+    static boolean[] gLoaded;
+    static int[][] gIds;           // per group: encoded ids (tex id, or 0x10000 | sprite id)
+
+    /** Make exactly these groups resident: unload the others first so memory never holds two levels' art. */
+    static void require(int[] want) throws IOException {
+        boolean[] keep = new boolean[gLoaded.length];
+        for (int k = 0; k < want.length; k++) keep[want[k]] = true;
+        boolean freed = false;
+        for (int g = 0; g < gLoaded.length; g++) {
+            if (!gLoaded[g] || keep[g]) continue;
+            int[] ids = gIds[g];
+            for (int k = 0; k < ids.length; k++) {
+                int id = ids[k];
+                if (id >= 0x10000) { id &= 0xffff; spr[id] = null; sTop[id] = null; sBot[id] = null; }
+                else tex[id] = null;
+            }
+            gLoaded[g] = false;
+            gIds[g] = null;
+            freed = true;
+        }
+        if (freed) System.gc();
+        for (int k = 0; k < want.length; k++) {
+            int g = want[k];
+            if (gLoaded[g]) continue;
+            DataInputStream in = new DataInputStream(G.open("/g/" + g + ".bin"));
+            int n = in.readShort();
+            int[] ids = new int[n];
+            for (int i = 0; i < n; i++) {
+                int kind = in.readByte(), id = in.readShort();
+                if (kind == 0) { readTex(in, id); ids[i] = id; }
+                else { readSpr(in, id); ids[i] = 0x10000 | id; }
+            }
+            in.close();
+            gIds[g] = ids;
+            gLoaded[g] = true;
+        }
+    }
+
+    // ---------------- animated textures: conveyor belts, rivers and waterfalls roll; shock and spike floors switch
+    // (each switching pair swaps the texture data of its "on" and "off" ids; pairOn remembers which data is "on")
+    static final int[] PAIR_ON = {Res.T_SHOCK, Res.T_SPIKES}, PAIR_OFF = {Res.T_SHOCKOFF, Res.T_SPIKESOFF};
+    static final byte[][] pairOn = new byte[2][];
+
+    static void resetAnim() {
+        for (int k = 0; k < 2; k++) {
+            byte[] a = tex[PAIR_ON[k]], b = tex[PAIR_OFF[k]];
+            if (a == null || b == null) { pairOn[k] = null; continue; }
+            if (b == pairOn[k]) { tex[PAIR_ON[k]] = b; tex[PAIR_OFF[k]] = a; }
+            else pairOn[k] = a;
+        }
+    }
+
+    static void showPair(int k, boolean on) {
+        if (pairOn[k] == null) return;
+        int a = PAIR_ON[k], b = PAIR_OFF[k];
+        if ((tex[a] == pairOn[k]) != on) {
+            byte[] t = tex[a];
+            tex[a] = tex[b];
+            tex[b] = t;
+        }
+    }
+
+    static final byte[] tmpRoll = new byte[128];
+
+    static void animTick() {
+        roll(Res.T_CONV_N, true, 2);
+        roll(Res.T_CONV_S, true, -2);
+        roll(Res.T_CONV_E, false, -2);
+        roll(Res.T_CONV_W, false, 2);
+        roll(Res.T_RIVER, false, -1);
+        roll(Res.T_FALLS, true, -2);
+        if ((W.ticks & 3) == 0) roll(Res.T_XLAVA, false, 1);
+    }
+
+    /** Scroll a 64x64 flat (column-major: index = x * 64 + y) by n texels along y (vert) or x. */
+    static void roll(int id, boolean vert, int n) {
+        byte[] t = tex[id];
+        if (t == null || t.length < 4096) return;
+        if (vert) {
+            for (int b = 0; b < 4096; b += 64) {
+                if (n > 0) {
+                    System.arraycopy(t, b, tmpRoll, 0, n);
+                    System.arraycopy(t, b + n, t, b, 64 - n);
+                    System.arraycopy(tmpRoll, 0, t, b + 64 - n, n);
+                } else {
+                    System.arraycopy(t, b + 64 + n, tmpRoll, 0, -n);
+                    System.arraycopy(t, b, t, b - n, 64 + n);
+                    System.arraycopy(tmpRoll, 0, t, b, -n);
+                }
+            }
+        } else {
+            int k = (n < 0 ? -n : n) * 64;
+            byte[] tmp = tmpRoll;          // |n| <= 2
+            if (n > 0) {
+                System.arraycopy(t, 0, tmp, 0, k);
+                System.arraycopy(t, k, t, 0, 4096 - k);
+                System.arraycopy(tmp, 0, t, 4096 - k, k);
+            } else {
+                System.arraycopy(t, 4096 - k, tmp, 0, k);
+                System.arraycopy(t, 0, t, k, 4096 - k);
+                System.arraycopy(tmp, 0, t, 0, k);
+            }
+        }
     }
 
     static int sin(int a) { return SIN[a & 4095]; }
@@ -262,7 +376,7 @@ final class E {
             else { stx = 1; sdx = (int) (((long) (0x10000 - (px & 0xffff)) * ddx) >> 16); }
             if (rdy < 0) { sty = -1; sdy = (int) (((long) (py & 0xffff) * ddy) >> 16); }
             else { sty = 1; sdy = (int) (((long) (0x10000 - (py & 0xffff)) * ddy) >> 16); }
-            int side = 0, perp = 0, texId = 0, u = 0, prev = (my << 6) | mx, c = prev;
+            int side = 0, perp = 0, texId = 0, u = 0, prev = (my << 6) | mx, c = prev, mark = 0;
             boolean hit = false;
             for (int step = 0; step < 72; step++) {
                 prev = c;
@@ -273,7 +387,32 @@ final class E {
                 int w = wall[c];
                 if (w == 0) continue;
                 int fl = flag[c];
-                if ((fl & W.F_DOOR) != 0) {
+                if ((fl & (W.F_DOOR | W.F_SECRET)) == (W.F_DOOR | W.F_SECRET) && door[c] > 0) {
+                    // secret pushwall sliding away: a full-height face at fraction p of the cell along the push axis
+                    int op = door[c];
+                    if (op >= 65536) continue;
+                    int pd = W.push[c];
+                    int p = (pd & 1) == 0 ? op : 65536 - op;
+                    int entry = side == 0 ? sdx - ddx : sdy - ddy, exit = sdx < sdy ? sdx : sdy, dm;
+                    if (pd < 2) dm = sdx - ddx + (int) ((long) ddx * (rdx > 0 ? p : 65536 - p) >> 16);
+                    else dm = sdy - ddy + (int) ((long) ddy * (rdy > 0 ? p : 65536 - p) >> 16);
+                    if (dm < entry || dm >= exit) continue;
+                    perp = dm;
+                    if (pd < 2) {
+                        side = 0;
+                        u = ((py + (int) ((long) dm * rdy >> 16)) >> 10) & 63;
+                        if (rdx < 0) u = 63 - u;
+                    } else {
+                        side = 1;
+                        u = ((px + (int) ((long) dm * rdx >> 16)) >> 10) & 63;
+                        if (rdy > 0) u = 63 - u;
+                    }
+                    texId = (w & 255) - 1;
+                    hit = true;
+                    prev = c;
+                    break;
+                }
+                if ((fl & (W.F_DOOR | W.F_SECRET)) == W.F_DOOR) {
                     int op = door[c];
                     if (side == 0) {
                         int dm = sdx - ddx + (ddx >> 1);
@@ -308,6 +447,9 @@ final class E {
                 if (side == 1 && rdy > 0) u = 63 - u;
                 texId = (w & 255) - 1;
                 if ((flag[prev] & (W.F_DOOR | W.F_SECRET)) == W.F_DOOR) texId = doorframe;
+                // a secret pushwall gives itself away to a sharp eye: a hairline gap around the panel and a
+                // touch of shadow
+                if ((fl & (W.F_DOOR | W.F_SECRET)) == (W.F_DOOR | W.F_SECRET)) mark = u < 2 || u > 61 ? 9 : 2;
                 hit = true;
                 break;
             }
@@ -319,13 +461,25 @@ final class E {
             wt[x] = ys;
             wb[x] = ye;
             if (!hit) { wt[x] = hor; wb[x] = hor; continue; }
-            int s = (int) (((long) perp * fk) >> 20) + light[prev] + (side == 1 ? 2 : 0);
+            int s = (int) (((long) perp * fk) >> 20) + light[prev] + (side == 1 ? 2 : 0) + mark;
+            if (s > 140) s = 140;                  // thick fog: far walls are all fog anyway
             int so = SHC[s < 0 ? 0 : s];
             byte[] t = tex[texId];
             int base = u << 6;
             int stp = (int) (((long) perp << 6) / projY);
             int tp = (ys - top) * stp;
             int o = ys * RW + x;
+            if (mark != 0) {
+                // ...and a dark crack along the floor, as if the panel doesn't quite sit on it
+                int sg = SHC[s + 12 < 0 ? 0 : s + 12];
+                for (int y = ys; y < ye; y++) {
+                    int v = (tp >> 16) & 63;
+                    buf[o] = cmap[(v >= 60 ? sg : so) | (t[base + v] & 255)];
+                    tp += stp;
+                    o += RW;
+                }
+                continue;
+            }
             for (int y = ys; y < ye; y++) {
                 buf[o] = cmap[so | (t[base + ((tp >> 16) & 63)] & 255)];
                 tp += stp;
@@ -393,7 +547,7 @@ final class E {
     static final int VF_TRANS = 1, VF_BRIGHT = 2;
 
     static void addSprite(int s, int x, int y, int z, int scale, int flags, int lightShade) {
-        if (nv >= MAXV || s < 0) return;
+        if (nv >= MAXV || s < 0 || spr[s] == null) return;
         int dx = x - px, dy = y - py;
         int depth = (int) (((long) dx * dirX + (long) dy * dirY) >> 16);
         if (depth < 9000 || depth > (40 << 16)) return;
@@ -431,7 +585,7 @@ final class E {
             int ikx = (int) ((1L << 32) / kx), iky = (int) ((1L << 32) / ky);
             int sd = (int) (((long) depth * fogK) >> 20) + vL[i];
             if ((vF[i] & VF_BRIGHT) != 0) sd = 0;
-            int so = SHC[sd < 0 ? 0 : sd];
+            int so = SHC[sd < 0 ? 0 : sd > 159 ? 159 : sd];
             boolean trans = (vF[i] & VF_TRANS) != 0;
             byte[] d = spr[s];
             short[] st = sTop[s], sb = sBot[s];
@@ -484,7 +638,7 @@ final class E {
             if (sz > 3) sz = 3;
             int szy = sz * DX / DY;
             int sd = (int) (((long) depth * fogK) >> 20) + 4;
-            int col = W.pC[i] >= Res.FB0 ? cmap[W.pC[i]] : cmap[SHC[sd] | W.pC[i]];
+            int col = W.pC[i] >= Res.FB0 ? cmap[W.pC[i]] : cmap[SHC[sd > 159 ? 159 : sd] | W.pC[i]];
             for (int yy = sy; yy < sy + szy; yy++) {
                 if (yy < 0 || yy >= RH) continue;
                 int o = yy * RW;

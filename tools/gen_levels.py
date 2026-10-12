@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
-"""Build the four levels programmatically, validate them and write res/l1..l4.bin plus preview PNGs."""
-import os, json, struct
+"""Build the levels programmatically, validate them and write res/l<n>.bin plus preview PNGs."""
+import os, sys, json, struct
 from collections import deque
 import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, '..', 'res')
+sys.path.insert(0, HERE)
+import defs
 info = json.load(open(os.path.join(HERE, 'pack_info.json')))
-WALLS = {n: i for i, n in enumerate(info['walls'])}
-FLATS = {n: i for i, n in enumerate(info['flats'])}
+TEX = info['tex']                     # texture name -> global id
+GROUPS = info['groups']               # group name -> id
+WALLS = TEX
+FLATS = TEX
 SKY = 255
-
-# thing types (must match Java World constants)
-T = dict(zombie=1, scarecrow=2, wraith=3, witch=4, boss=5,
-         candy=10, bucket=11, brew=12, armor=13, bullets=14, shells=15, pumpkins=16, shotgun=17, tommy=18, launcher=19,
-         key_red=20, key_blue=21, key_gold=22,
-         jack=30, jack2=31, candles=32, tree=33, tomb=34, tomb2=35, hanging=36, cauldron=37, keg=38, skulls=39, lamp=40,
-         patch=41, gibs=42)
+T = defs.THINGS
+TNAME = {v: k for k, v in T.items()}
 # flags
 F_DOOR, F_SECRET, F_EXIT, F_HURT, F_KRED, F_KBLUE, F_KGOLD, F_OUT = 1, 2, 4, 8, 16, 32, 64, 128
 
 
 class Level:
-    def __init__(self, name, sub, w, h, sky=0, music=1, fog=(16, 8, 24), fogk=18, lightning=0, ambient_out=12):
+    def __init__(self, name, sub, w, h, sky='sky0', music=2, fog=(16, 8, 24), fogk=18, lightning=0, ambient_out=12, flags=0):
         self.name, self.sub, self.w, self.h = name, sub, w, h
         self.sky, self.music, self.fog, self.fogk, self.lightning = sky, music, fog, fogk, lightning
+        self.flags = flags
         self.wall = np.zeros((h, w), int)          # 0 = empty, else tex+1
         self.flr = np.zeros((h, w), int)
         self.ceil = np.zeros((h, w), int)
@@ -34,6 +34,7 @@ class Level:
         self.things = []                            # (type, x, y, minskill)
         self.start = (1.5, 1.5, 0)
         self.ambient_out = ambient_out
+        self.keepfc = set()
 
     # ---------- painting helpers
     def region(self, x0, y0, x1, y1, flr, ceil, light, out=False, hurt=False):
@@ -89,11 +90,64 @@ class Level:
         self.wall[y, x] = WALLS['exit'] + 1
         self.flag[y, x] = F_EXIT
 
-    def put(self, kind, x, y, skill=0):
-        self.things.append((T[kind], x + 0.5, y + 0.5, skill))
+    def put(self, kind, x, y, skill=0, ambush=False):
+        """ambush: the monster only appears when the level's trigger fires (the idol, or the red key in the fog)."""
+        self.things.append((T[kind], x + 0.5, y + 0.5, skill | (0x80 if ambush else 0)))
+
+    # ---------- episode 4 gadgets
+    def tele(self, x, y, ch, dx, dy, ddir):
+        """Teleporter pad at (x, y) sending the player to (dx, dy), facing ddir (EAST/SOUTH/WEST/NORTH)."""
+        d = {0: 0, 1024: 1, 2048: 2, 3072: 3}[ddir]
+        self.things.append((T['tpad'], x + 0.5, y + 0.5, ch << 2))
+        self.things.append((T['tdest'], dx + 0.5, dy + 0.5, (ch << 2) | (d << 5)))
+
+    def shiftw(self, x, y):
+        """A wall that sinks into the floor when a lever is pulled (and rises again on the next pull)."""
+        self.wall[y, x] = WALLS['shiftwall'] + 1
+        self.flag[y, x] = 0
+
+    def shiftf(self, x, y):
+        """Open floor where a wall rises when a lever is pulled."""
+        assert self.wall[y, x] == 0, ('shift floor on a wall', self.name, x, y)
+        self.flr[y, x] = FLATS['shiftflr']
+
+    def lever(self, x, y):
+        self.setw(x, y, 'switch')
 
     def putf(self, kind, x, y, skill=0):
         self.things.append((T[kind], x, y, skill))
+
+    # ---------- episode 5 gadgets
+    def darter(self, x, y, d):
+        """A dart trap in the wall behind (x, y), shooting in direction d (0 east, 1 south, 2 west, 3 north) when a
+        pressure plate within 5 cells is stepped on."""
+        self.things.append((T['darter'], x + 0.5, y + 0.5, d << 5))
+        bx, by = x - (1, 0, -1, 0)[d], y - (0, 1, 0, -1)[d]
+        assert self.wall[by, bx], ('darter without a wall behind', self.name, x, y)
+        self.setw(bx, by, 'darts')
+
+    def boulder(self, x, y, d):
+        """A boulder hidden in the roof: it drops when the level triggers (the idol) and rolls in direction d."""
+        self.things.append((T['boulder'], x + 0.5, y + 0.5, d << 5))
+
+    def trigwall(self, x, y, flr=None, ceil=None, light=None):
+        """A cell that flips when the level triggers (the idol is lifted): a wall here sinks away, an open cell gets a wall
+        (sealing the way back). For a wall that opens, give the floor, ceiling and light it will show."""
+        self.things.append((T['trigwall'], x + 0.5, y + 0.5, 0))
+        if flr:
+            self.flr[y, x] = FLATS[flr]
+            self.ceil[y, x] = SKY if ceil == 'sky' else FLATS[ceil]
+            self.light[y, x] = light
+            self.keepfc.add((x, y))
+
+    def pit(self, x0, y0, x1, y1):
+        for yy in range(y0, y1 + 1):
+            for xx in range(x0, x1 + 1):
+                assert self.wall[yy, xx] == 0, ('pit on a wall', self.name, xx, yy)
+                self.flr[yy, xx] = FLATS['pit']
+                self.light[yy, xx] = 0          # fully 'lit', so the black shows as black instead of fading to fog
+
+    extra_tex = ()
 
     # ---------- validation & output
     def solid(self, x, y):
@@ -117,34 +171,81 @@ class Level:
                     else:
                         assert self.wall[y, x - 1] == 0 and self.wall[y, x + 1] == 0, ('door blocked', self.name, x, y)
         # things must be on open cells
-        solid_things = {T['tree'], T['tomb'], T['tomb2'], T['cauldron'], T['keg'], T['lamp']}
+        solid_things = {T[n] for n in defs.SOLID_DECOR}
         blocked = np.zeros((h, w), bool)
+        PIT = FLATS.get('pit', -1)
+        pit = (self.wall == 0) & (self.flr == PIT)
         for t, x, y, s in self.things:
             cx, cy = int(x), int(y)
+            if TNAME[t] == 'trigwall':
+                continue
             assert self.wall[cy, cx] == 0, ('thing in wall', self.name, t, x, y)
+            assert not pit[cy, cx], ('thing in a pit', self.name, TNAME[t], x, y)
             if t in solid_things:
                 blocked[cy, cx] = True
         sx, sy, sa = self.start
         assert self.wall[int(sy), int(sx)] == 0
 
+        SW_A = WALLS['shiftwall'] + 1 if 'shiftwall' in WALLS else -1
+        SF_B = FLATS['shiftflr'] if 'shiftflr' in FLATS else -1
+        LEVERS = {WALLS[n] + 1 for n in ('switch', 'switch2') if n in WALLS}
+        shiftA = self.wall == SW_A
+        shiftB = (self.wall == 0) & (self.flr == SF_B)
+        for t, x, y, s in self.things:
+            assert not (shiftA[int(y), int(x)] or shiftB[int(y), int(x)]), ('thing on a shifting cell', self.name, TNAME[t], x, y)
+        pads = {}
+        dests = {}
+        for t, x, y, s in self.things:
+            if t == T['tpad']: pads[(int(x), int(y))] = (s >> 2) & 7
+            if t == T['tdest']: dests[(s >> 2) & 7] = (int(x), int(y))
+        for p, ch in pads.items():
+            assert ch in dests, ('teleporter without destination', self.name, p, ch)
+
+        def can_enter(nx, ny, st, keys):
+            if blocked[ny, nx] or pit[ny, nx]:
+                return False
+            wv, fl = self.wall[ny, nx], self.flag[ny, nx]
+            if shiftA[ny, nx]:
+                return st == 1
+            if shiftB[ny, nx] and st == 1:
+                return False
+            if wv and not (fl & F_DOOR):
+                return False
+            if fl & F_KRED and 'red' not in keys: return False
+            if fl & F_KBLUE and 'blue' not in keys: return False
+            if fl & F_KGOLD and 'gold' not in keys: return False
+            return True
+
         def reach(keys):
-            seen = np.zeros((h, w), bool)
-            q = deque([(int(sx), int(sy))]); seen[int(sy), int(sx)] = True
+            seen = np.zeros((2, h, w), bool)
+            q = deque([(int(sx), int(sy), 0)]); seen[0, int(sy), int(sx)] = True
             while q:
-                x, y = q.popleft()
+                x, y, st = q.popleft()
+                nxt = []
                 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                     nx, ny = x + dx, y + dy
-                    if seen[ny, nx] or blocked[ny, nx]:
-                        continue
-                    wv, fl = self.wall[ny, nx], self.flag[ny, nx]
-                    if wv and not (fl & F_DOOR):
-                        continue
-                    if fl & F_KRED and 'red' not in keys: continue
-                    if fl & F_KBLUE and 'blue' not in keys: continue
-                    if fl & F_KGOLD and 'gold' not in keys: continue
-                    seen[ny, nx] = True
-                    q.append((nx, ny))
-            return seen
+                    if self.wall[ny, nx] in LEVERS:
+                        nxt.append((x, y, 1 - st))
+                    elif can_enter(nx, ny, st, keys):
+                        nxt.append((nx, ny, st))
+                    elif pit[ny, nx]:              # jump: over one pit cell walking, two with a sprint
+                        for k in (2, 3):
+                            jx, jy = x + k * dx, y + k * dy
+                            if not (0 <= jx < w and 0 <= jy < h):
+                                break
+                            if pit[jy, jx]:
+                                continue
+                            if can_enter(jx, jy, st, keys):
+                                nxt.append((jx, jy, st))
+                            break
+                if (x, y) in pads:
+                    dx_, dy_ = dests[pads[(x, y)]]
+                    nxt.append((dx_, dy_, st))
+                for nx, ny, ns in nxt:
+                    if not seen[ns, ny, nx]:
+                        seen[ns, ny, nx] = True
+                        q.append((nx, ny, ns))
+            return seen[0] | seen[1]
         keys = set()
         for it in range(4):
             seen = reach(keys)
@@ -152,23 +253,82 @@ class Level:
                 if seen[int(y), int(x)]:
                     if t == T['key_red']: keys.add('red')
                     if t == T['key_blue']: keys.add('blue')
-                    if t == T['key_gold']: keys.add('gold')
+                    if t == T['key_gold'] or t == T['idol']: keys.add('gold')
         seen = reach(keys)
         exits = [(x, y) for y in range(h) for x in range(w) if self.flag[y, x] & F_EXIT]
         ok_exit = any(seen[y + dy, x + dx] for (x, y) in exits for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
                       if 0 <= x + dx < w and 0 <= y + dy < h)
-        bosses = [t for t in self.things if t[0] == T['boss']]
+        bosses = [t for t in self.things if TNAME[t[0]] in defs.BOSSES]
         assert ok_exit or bosses, ('exit unreachable', self.name)
         unreach = [(t, x, y) for t, x, y, s in self.things if not seen[int(y), int(x)] and t not in solid_things]
         return keys, unreach
 
+    def finish(self):
+        """Wall cells get the level's most common floor/ceiling so stray floor reads never hit an unloaded texture."""
+        open_ = (self.wall == 0) | ((self.flag & F_DOOR) != 0)
+        fl = np.bincount(self.flr[open_].ravel()).argmax()
+        ce = self.ceil[open_].ravel()
+        cm = np.bincount(ce).argmax()
+        solid = ~open_
+        keep = [(x, y, self.flr[y, x], self.ceil[y, x]) for (x, y) in self.keepfc]
+        self.flr[solid] = fl
+        self.ceil[solid] = cm
+        for x, y, f, c in keep:
+            self.flr[y, x] = f
+            self.ceil[y, x] = c
+
+    def groups(self):
+        """Asset groups this level needs: every texture it shows plus the sprite sets of its things."""
+        self.finish()
+        used = set()
+        names = {v: k for k, v in TEX.items()}
+        for y in range(self.h):
+            for x in range(self.w):
+                if self.wall[y, x]:
+                    used.add(names[self.wall[y, x] - 1])
+                used.add(names[self.flr[y, x]])
+                if self.ceil[y, x] != SKY:
+                    used.add(names[self.ceil[y, x]])
+        if self.sky:
+            used.add(self.sky)
+        for a, b in (('shock', 'shockoff'), ('switch', 'switch2'), ('switch2', 'switch'), ('shiftwall', 'shiftflr'), ('shiftflr', 'shiftwall'),
+                     ('spikes', 'spikesoff')):
+            if a in used:
+                used.add(b)
+        used |= set(self.extra_tex)
+        g = set()
+        for n in used:
+            if n not in defs.COMMON_TEX:
+                g.add('t:' + n)
+        for t, x, y, s in self.things:
+            for sg in defs.thing_groups(TNAME[t]):
+                if 's:' + sg in GROUPS:
+                    g.add('s:' + sg)
+        for sg in self.extra_groups:
+            g.add('s:' + sg)
+        missing = [n for n in g if n not in GROUPS]
+        assert not missing, ('missing asset groups', self.name, missing)
+        return sorted(GROUPS[n] for n in g)
+
+    extra_groups = ()
+
+    def asset_bytes(self):
+        sizes = info['group_size']
+        inv = {v: k for k, v in GROUPS.items()}
+        return info['common_size'] + sum(sizes[inv[g]] for g in self.groups())
+
     def write(self, fname):
         out = bytearray(b'L')
-        out += struct.pack('>b', 1)
+        out += struct.pack('>b', 2)
         for s in (self.name, self.sub):
             b = s.encode()
             out += struct.pack('>h', len(b)) + b
-        out += struct.pack('>BBBBBBBB', self.sky, self.music, self.fog[0], self.fog[1], self.fog[2], self.fogk, self.lightning, 0)
+        sky = TEX[self.sky] if self.sky else 255
+        out += struct.pack('>BBBBBBBB', sky, self.music, self.fog[0], self.fog[1], self.fog[2], self.fogk, self.lightning, self.flags)
+        gl = self.groups()
+        out += struct.pack('>B', len(gl))
+        for gid in gl:
+            out += struct.pack('>h', gid)
         out += struct.pack('>BB', self.w, self.h)
         sx, sy, sa = self.start
         out += struct.pack('>hhh', int(sx * 16), int(sy * 16), sa)
@@ -176,7 +336,7 @@ class Level:
             out += arr.astype(np.uint8).tobytes()
         out += struct.pack('>h', len(self.things))
         for t, x, y, s in self.things:
-            out += struct.pack('>Bhhb', t, int(x * 16), int(y * 16), s)
+            out += struct.pack('>Bhhb', t, int(x * 16), int(y * 16), s - 256 if s >= 128 else s)
         with open(os.path.join(RES, fname), 'wb') as f:
             f.write(out)
         return len(out)
@@ -186,7 +346,8 @@ class Level:
         s = 8
         img = np.zeros((self.h * s, self.w * s, 3), np.uint8)
         cols = {T['zombie']: (120, 200, 80), T['scarecrow']: (255, 140, 0), T['wraith']: (180, 230, 255), T['witch']: (160, 60, 200),
-                T['boss']: (255, 0, 0)}
+                T['boss']: (255, 0, 0), T['skel']: (230, 230, 210), T['clown']: (255, 80, 200), T['wolf']: (150, 100, 60),
+                T['bat']: (90, 60, 120), T['vamp']: (200, 0, 60), T['giggles']: (255, 0, 0), T['count']: (255, 0, 0)}
         for y in range(self.h):
             for x in range(self.w):
                 if self.wall[y, x]:
@@ -201,11 +362,24 @@ class Level:
                     l = 1 - self.light[y, x] / 40
                     c = (40 * l, 60 * l, 40 * l) if self.flag[y, x] & F_OUT else (60 * l, 50 * l, 40 * l)
                     if self.flag[y, x] & F_HURT: c = (60, 140, 30) if self.flr[y, x] == FLATS['slime'] else (170, 60, 10)
+                    fn = {v: k for k, v in FLATS.items()}.get(self.flr[y, x], '')
+                    if fn == 'shock': c = (60, 120, 255)
+                    elif fn.startswith('conv_'): c = (200, 170, 40)
+                    elif fn == 'shiftflr': c = (90, 40, 130)
+                    elif fn == 'pit': c = (0, 0, 0)
+                    elif fn == 'river': c = (40, 110, 140)
+                    elif fn == 'pplate': c = (230, 200, 40)
+                    elif fn == 'spikes': c = (200, 200, 220)
+                    elif fn in ('xlava',): c = (220, 80, 10)
+                if self.wall[y, x] and 'shiftwall' in WALLS and self.wall[y, x] == WALLS['shiftwall'] + 1: c = (170, 60, 255)
+                if self.wall[y, x] and 'switch' in WALLS and self.wall[y, x] == WALLS['switch'] + 1: c = (255, 255, 255)
                 img[y * s:(y + 1) * s, x * s:(x + 1) * s] = c
         for t, x, y, sk in self.things:
-            c = cols.get(t, (240, 240, 120) if t < 30 else (130, 130, 160))
+            mon = TNAME[t] in defs.MONSTERS or TNAME[t] in defs.PICKUPS
+            c = cols.get(t, (240, 240, 120) if TNAME[t] in defs.PICKUPS else (200, 120, 255) if TNAME[t] in ('tpad', 'tdest')
+                         else (255, 60, 60) if TNAME[t] in defs.MONSTERS else (130, 130, 160))
             px, py = int(x * s), int(y * s)
-            r = 3 if t < 30 else 2
+            r = 3 if mon else 2
             img[max(0, py - r):py + r, max(0, px - r):px + r] = c
         px, py = int(self.start[0] * s), int(self.start[1] * s)
         img[py - 3:py + 3, px - 3:px + 3] = (255, 255, 255)
@@ -218,7 +392,7 @@ NORTH, EAST, SOUTH, WEST = 3072, 0, 1024, 2048
 
 
 def level1():
-    L = Level('DEAD END CEMETERY', 'Night 1 - Hollow Creek', 44, 36, sky=0, music=1, fog=(14, 8, 26), fogk=17, lightning=1)
+    L = Level('DEAD END CEMETERY', 'Night 1 - Hollow Creek', 44, 36, sky='sky0', music=2, fog=(14, 8, 26), fogk=17, lightning=1)
     W, H = L.w, L.h
     L.region(1, 1, W - 2, H - 2, 'grass', 'sky', 13, out=True)
     L.walls(0, 0, W - 1, H - 1, 'brick')
@@ -286,7 +460,7 @@ def level1():
 
 
 def level2():
-    L = Level('BLACKWOOD MANOR', 'Night 2 - The Cult House', 48, 44, sky=0, music=2, fog=(8, 4, 10), fogk=15, lightning=1)
+    L = Level('BLACKWOOD MANOR', 'Night 2 - The Cult House', 48, 44, sky='sky0', music=3, fog=(8, 4, 10), fogk=15, lightning=1)
     W, H = L.w, L.h
     L.region(1, 1, W - 2, H - 2, 'grass', 'sky', 13, out=True)
     L.walls(0, 0, W - 1, H - 1, 'brick')
@@ -358,7 +532,7 @@ def level2():
 
 
 def level3():
-    L = Level('THE BONE CATACOMBS', 'Night 3 - Under Blackwood', 48, 48, sky=255, music=3, fog=(2, 6, 2), fogk=22)
+    L = Level('THE BONE CATACOMBS', 'Night 3 - Under Blackwood', 48, 48, sky=None, music=4, fog=(2, 6, 2), fogk=22)
     W, H = L.w, L.h
     L.block(0, 0, W - 1, H - 1, 'skullwall')
     def corr(x0, y0, x1, y1, light=19):
@@ -432,7 +606,7 @@ def level3():
 
 
 def level4():
-    L = Level("THE PUMPKIN KING'S PATCH", 'Night 4 - Blood Moon', 40, 42, sky=1, music=4, fog=(30, 4, 2), fogk=12, lightning=1)
+    L = Level("THE PUMPKIN KING'S PATCH", 'Night 4 - Blood Moon', 40, 42, sky='sky1', music=5, fog=(30, 4, 2), fogk=12, lightning=1, flags=1)
     W, H = L.w, L.h
     L.region(1, 1, W - 2, H - 2, 'dirt', 'sky', 11, out=True)
     L.walls(0, 0, W - 1, H - 1, 'pumpkinwall')
@@ -466,12 +640,44 @@ def level4():
     return L
 
 
+LEVELS = [level1, level2, level3, level4]
+
+# Ammo for rooms whose monsters outweighed their loot (found with test/sim Rooms need): no fight without a pickup nearby.
+EXTRA_LOOT = {
+    2: [('shells', 20, 8)],
+    3: [('bullets', 29, 5)],
+    5: [('shells', 13, 32)],
+    6: [('shells', 27, 5), ('bullets', 43, 19)],
+    7: [('shells', 14, 10), ('bullets', 34, 31)],
+    9: [('shells', 9, 25)],
+    10: [('bullets', 39, 6)],
+    11: [('shells', 27, 6), ('bullets', 25, 16), ('shells', 27, 30), ('bullets', 47, 30)],
+    13: [('bullets', 45, 10), ('shells', 11, 4), ('bullets', 16, 27)],
+    14: [('shells', 14, 10), ('bullets', 43, 29)],
+    15: [('shells', 41, 5), ('bullets', 40, 25), ('shells', 16, 30), ('bullets', 29, 33)],
+}
+
 if __name__ == '__main__':
+    import gen_levels2 as G2
+    import gen_levels3 as G3
+    import gen_levels4 as G4
     os.makedirs(os.path.join(HERE, 'out'), exist_ok=True)
-    for k, fn in enumerate((level1, level2, level3, level4)):
+    todo = [(k + 1, fn) for k, fn in enumerate(LEVELS + G2.LEVELS2 + G3.LEVELS3 + G4.LEVELS4)] + \
+        [(101 + k, fn) for k, fn in enumerate(G2.CUTS + G3.CUTS3 + G4.CUTS4)]
+    only = [int(a) for a in sys.argv[1:]]
+    for num, fn in todo:
+        if only and num not in only:
+            continue
         L = fn()
-        keys, unreach = L.validate()
-        n = L.write('l%d.bin' % (k + 1))
-        L.preview('map%d.png' % (k + 1))
-        mons = sum(1 for t in L.things if t[0] < 10)
-        print('level', k + 1, L.name, 'bytes', n, 'things', len(L.things), 'monsters', mons, 'keys', keys, 'unreachable', unreach)
+        for kind, x, y in EXTRA_LOOT.get(num, []):
+            assert not L.solid(x, y), (num, kind, x, y)
+            L.put(kind, x, y)
+        keys, unreach = L.validate() if num < 100 else (set(), [])
+        if any(TNAME[t[0]] == 'idol' for t in L.things):
+            G4.check_trigger(L)
+        n = L.write('l%d.bin' % num)
+        L.preview('map%d.png' % num)
+        k = num - 1
+        mons = sum(1 for t in L.things if TNAME[t[0]] in defs.MONSTERS)
+        print('level %2d %-28s bytes %5d things %3d monsters %2d assets %6d keys %s unreachable %s' %
+              (k + 1, L.name, n, len(L.things), mons, L.asset_bytes(), sorted(keys), unreach))

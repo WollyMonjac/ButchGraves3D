@@ -28,17 +28,28 @@ def frame_axes(fwd, up_hint=(0, 1, 0)):
     return np.stack([side, up, -f], 1)
 
 
-def fist(ps, c, R, mat=GLOVE, s=1.0, thumb_side=-1):
-    """Fist gripping a handle along local y. R columns: x side, y up(grip axis), z back (toward eye)."""
+KNUCKLE = Mat(fn=lambda p, n: np.tile(np.array([0.86, 0.6, 0.45]), (len(p), 1)) * (0.9 + 0.2 * fbm(p, 30, 2, 5))[:, None], spec=0.35, shin=18)
+CUFF = Mat((0.16, 0.1, 0.06), var=0.2, vfreq=40, spec=0.4, shin=20)    # leather wrist strap
+
+
+def fist(ps, c, R, mat=SKIN, s=1.0, thumb_side=-1):
+    """Bare fist gripping a handle along local y. R columns: x side, y up(grip axis), z back (toward eye).
+    (The hands used to be black fingerless gloves, which vanished against dark floors; bare skin with a leather wrist
+    strap reads as a hand at any light level.)"""
     c = np.asarray(c, float)
     L = lambda v: c + R @ (np.asarray(v, float) * s)
-    ps.append(P(Box(L((0, 0, 0.025)), np.array([0.042, 0.05, 0.03]) * s, R=R, r=0.018 * s), mat, 0.02))
+    ps.append(P(Box(L((0, 0, 0.025)), np.array([0.044, 0.052, 0.032]) * s, R=R, r=0.02 * s), mat, 0.02))
     for i in range(4):
         y = 0.036 - i * 0.024
-        ps.append(P(Cone(L((thumb_side * -0.04, y, 0.03)), L((thumb_side * -0.045, y, -0.035)), 0.015 * s, 0.013 * s), SKIN if i < 2 else mat, 0.012))
-        ps.append(P(Cone(L((thumb_side * -0.045, y, -0.035)), L((thumb_side * 0.0, y, -0.05)), 0.013 * s, 0.012 * s), SKIN, 0.01))
-    ps.append(P(Cone(L((thumb_side * 0.035, 0.04, 0.02)), L((thumb_side * 0.03, 0.065, -0.03)), 0.016 * s, 0.013 * s), SKIN, 0.012))
-    return L((0, -0.06, 0.08))   # wrist position
+        ps.append(P(Cone(L((thumb_side * -0.04, y, 0.03)), L((thumb_side * -0.046, y, -0.035)), 0.017 * s, 0.015 * s), mat, 0.012))
+        ps.append(P(Cone(L((thumb_side * -0.046, y, -0.035)), L((thumb_side * 0.0, y, -0.05)), 0.015 * s, 0.013 * s), mat, 0.01))
+    ps.append(P(Cone(L((thumb_side * 0.035, 0.04, 0.02)), L((thumb_side * 0.03, 0.068, -0.03)), 0.018 * s, 0.014 * s), mat, 0.012))
+    for i in range(4):     # knuckles along the back of the hand, so it reads as a fist and not a blob
+        ps.append(P(Sphere(L((thumb_side * -0.04, 0.036 - i * 0.024, 0.048)), 0.0155 * s), KNUCKLE, 0.008))
+    w = L((0, -0.06, 0.08))
+    ax = norm(L((0, -0.06, 0.08)) - L((0, 0, 0.025)))
+    ps.append(P(Cyl(L((0, -0.045, 0.06)), 0.04 * s, 0.014 * s, R=frame_axes(ax) @ rot(np.pi / 2, 0, 0), rr=0.006 * s), CUFF, 0.01))
+    return w   # wrist position
 
 
 def arm(ps, wrist, elbow, r=0.06):
@@ -159,7 +170,7 @@ def shotgun(frame=0):
             flash(ps, L((s * 0.024, 0.02, -0.66)), d, 0.13, seed=4 + s)
         ps = transform(ps, rot(-0.16, 0, 0.02), base + np.array([0, -0.15, 0.1]))
     elif frame == 2:
-        ps = transform(ps, rot(0.55, 0.25, -0.35), base + np.array([0, -0.1, 0.0]))
+        ps = transform(ps, rot(0.3, 0.12, -0.2), base + np.array([0, -0.1, 0.0]))
     return ps
 
 # ------------------------------------------------------------------ tommy gun
@@ -235,7 +246,7 @@ def launcher(frame=0):
     ps.append(P(Box(gc, (0.026, 0.06, 0.03), R=gR, r=0.01), GUNMETAL, 0.01))
     wr = fist(ps, gc, gR, s=1.1, thumb_side=-1)
     arm(ps, wr, wr + np.array([0.18, -0.25, 0.25]))
-    fg = L((0, -0.08, -0.32))
+    fg = L((-0.05, -0.075, -0.32))
     ps.append(P(Box(fg, (0.024, 0.055, 0.028), R=gR, r=0.01), GUNMETAL, 0.01))
     wl = fist(ps, fg, gR, s=1.05, thumb_side=1)
     arm(ps, wl, wl + np.array([-0.35, -0.22, 0.28]))
@@ -319,10 +330,10 @@ def place(ps, k, src, dst):
 
 
 PLACE = {
-    'revolver': (2.9, (0.1, -0.33, 0.25), (0.34, -0.42, 0.0)),
-    'shotgun': (2.6, (0.06, -0.36, 0.28), (0.3, -0.46, 0.05)),
-    'tommy': (2.7, (0.08, -0.34, 0.26), (0.3, -0.44, 0.02)),
-    'launcher': (2.2, (0.24, -0.3, 0.22), (0.38, -0.4, 0.1)),
+    'revolver': (2.9, (0.1, -0.33, 0.25), (0.33, -0.33, 0.0)),
+    'shotgun': (2.6, (0.06, -0.36, 0.28), (0.3, -0.37, 0.05)),
+    'tommy': (2.7, (0.08, -0.34, 0.26), (0.3, -0.39, 0.02)),
+    'launcher': (2.2, (0.24, -0.3, 0.22), (0.38, -0.31, 0.1)),
     'shovel': (1.5, (0.4, -0.5, 0.3), (0.42, -0.62, 0.3)),
 }
 

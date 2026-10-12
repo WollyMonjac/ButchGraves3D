@@ -1,0 +1,36 @@
+wait 2500
+tap 53
+wait 300
+tap 56
+wait 100
+tap 53
+wait 300
+wait 200
+tap 53
+wait 300
+tap 53
+wait 250
+tap 53
+wait 250
+tap 53
+wait 250
+tap 53
+wait 250
+tap 53
+wait 250
+tap 53
+wait 250
+wait 2200
+shot @OUT/01.png
+hold 54 500
+wait 100
+shot @OUT/02.png
+hold 54 500
+wait 100
+shot @OUT/03.png
+hold 50 1200
+shot @OUT/04.png
+hold 52 900
+hold 50 1000
+shot @OUT/05.png
+quit
