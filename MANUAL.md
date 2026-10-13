@@ -227,7 +227,7 @@ Damage is per hit on Treat (half on Trick, 130% on Nightmare). Health is on Trea
 |---|---|---|---|---|---|
 | <img src="docs/img/werewolf.png" width="72"> | **Werewolf** | 150 | quick | claws 10–17 | Lunges at double speed when it gets within 2–7 cells. Tough, and hard to make flinch. The Boomstick's job. |
 | <img src="docs/img/bat.png" width="72"> | **Vampire Bat** | 20 | very fast | bite 3–5 | Flies high and erratic in swarms. Almost any hit kills it. |
-| <img src="docs/img/bride.png" width="72"> | **Vampire Bride** | 110 | steady | blood bolt 9–16, bite 6–10 | Hovers. When she's hit, one time in four she vanishes in smoke and reappears a couple of cells away. |
+| <img src="docs/img/bride.png" width="72"> | **Vampire Bride** | 110 | steady | blood bolt 9–16, bite 6–10 | **Teleports when hit:** one time in four she vanishes in a puff of smoke and reappears a couple of cells away (never in the middle of her own attack), so keep your aim moving. Hovers a little off the ground. |
 
 ### Episode 4
 
@@ -661,13 +661,17 @@ boss), and almost never wins on Nightmare.
 | Option | Choices |
 |---|---|
 | Detail | High, Medium, Low. Medium halves the horizontal resolution, Low halves both; use Low on slow phones. |
-| Music | On, Menus only, Off. **Menus only** plays music on the title, story and tally screens but not during play: on a phone that can't play sound effects over music (some Nokia Series 40 models), that's how you get every gunshot and voice back. The game never switches the music off by itself. |
+| Screen size | Full, 90%, 80%, 70%, 60%. As in Doom, the 3D view shrinks to run faster, centred above the status bar and framed by a dark border in the episode's own crypt stone, circus canvas, castle stone, metal or temple stone. 70% draws about twice as fast as Full, and 60% about two and a half times; together with Low detail, that's about nine times as fast as High at full size. 5 / 6 step down a size, 4 steps back up. Cutscenes always fill the screen. |
+| Music | On, Menus only, Off. **Menus only** plays music on the title, story and tally screens but not during play. The game never switches the music off by itself. |
+| FX + music | **Auto** or **Take turns**. Some phones (some Nokia Series 40 models, for example) can't play a sound effect while music plays. With **Take turns** the music pauses for every effect and voice line and carries on from the same spot about a third of a second after the last one ends. Menu clicks don't pause it. On **Auto** the game plays them together, and if it finds that your phone can't, it switches to taking turns by itself for the rest of the session. A message tells you when that happens, and the option then reads *Auto (turns)*. In a busy fight there is hardly a quiet moment, so the music mostly waits; it comes back between fights. Cutscenes play without music when effects and music take turns, so the voices can be heard. Taking turns also helps on a phone whose sound keeps hanging when both play (the game then says *Sound trouble*). |
 | Sound FX | On, Off |
 | Voice | On, Off (Butch's lines and the cutscene voices) |
 | Vibration | On, Off (a buzz when you're hurt) |
 | Crosshair | On, Off |
-| FPS counter | On, Off. A second line shows what the phone's audio is doing: MUSIC ON or MUSIC STOPPED, then K (how often the music had to be restarted), W (how many effects may play at once over it), C (how far the effects backed off after audio hangs), NOMIX (the phone can't play effects over music), H (how many times the audio hung). |
+| FPS counter | On, Off. A second line shows what the phone's audio is doing: MUSIC ON, MUSIC PAUSED (waiting for an effect to finish) or MUSIC STOPPED, then K (how often the music had to be restarted), W (how many effects may play at once over it), C (how far the effects backed off after audio hangs), NOMIX (the phone can't play effects over music), T (effects and music are taking turns, and how many times the music has paused; a D after it means the music also has to let go of the phone's audio for each effect), H (how many times the audio hung). |
 | Cutscenes | **Classic**, or **Gory**: a cruder, bloodier cut of each ending where the villains get kicked, blown up and splattered across the camera lens. Only monsters and villains get hurt. |
+
+<p align="center"><img src="docs/img/screensize.png" width="640" alt="Screen size 70% in episodes 1, 2, 3 and 5"></p>
 
 During cutscenes, story pages and the tally screen the game keeps the phone's backlight on.
 

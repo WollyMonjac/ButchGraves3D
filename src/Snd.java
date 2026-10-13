@@ -27,7 +27,11 @@ import javax.microedition.media.Player;
  *  - when the phone's audio hangs, the engine backs off step by step instead of retrying the same thing:
  *    a hang while starting music stops music retries until the next level, repeated effect hangs without music
  *    shrink the player pool and then switch sampled sounds off for the session;
- *  - a phone that can only play one sampled sound at a time is detected and handled.
+ *  - a phone that can only play one sampled sound at a time is detected and handled;
+ *  - effects and music can take turns (Options -> FX + MUSIC): the MIDI is stopped right where it is before a sampled
+ *    sound starts (never the other way round, see the first point) and goes on from the same spot once nothing has
+ *    played for a moment. The player can choose that; on AUTO it is switched on for the session when the phone turns
+ *    out not to mix them (an effect only starts once the music is paused, or any effect takes the music's channel).
  */
 final class Snd implements Runnable {
     // ---------------- sound effect ids (order matches SFX keys)
@@ -69,7 +73,7 @@ final class Snd implements Runnable {
     static boolean sfxOn = true, voiceOn = true;
     // music: on, off, or only on the menus/story/tally screens (the player's choice in Options; the engine itself never
     // turns the music off). Some phones (e.g. some Nokia Series 40 XpressMusic models) can't play a WAV while a MIDI
-    // plays: there the effects wait for the music (noMix), and "menus only" is how the player can get them back.
+    // plays (noMix): there the music and the effects take turns (see turns()).
     static final int MUS_OFF = 0, MUS_ON = 1, MUS_MENUS = 2;
     static int musicMode = MUS_ON;
     static int mixFails;
@@ -79,6 +83,14 @@ final class Snd implements Runnable {
     static int maxWav = 99;              // sampled sounds allowed at once over the music (lowered when the phone takes
                                          // the music's channel for an effect)
     static int musicKicks;               // times the music had to be started again (shown with the FPS counter)
+    // effects and music taking turns: chosen by the player (fxTurns), or found to be needed on this phone (autoTurns,
+    // for the session: once they take turns there is no telling any more whether the phone could mix them)
+    static boolean fxTurns, autoTurns;
+    static boolean deep;                 // stopping the MIDI isn't enough for this phone: it must let go of the audio too
+    static int musicPauses, soloSteals;  // breaks the music took for effects; a lone effect took the music's channel
+    static volatile boolean heldNow;     // the music is on a break right now (status line)
+    static final int GAP = 300;          // ms of quiet before the music goes on (tried 200-500 and a gap that grows in
+                                         // fights: 300 gave the most music in the fewest scraps)
     static volatile int mSt = -1;        // the music player's state as the worker last saw it
     static boolean alive = true;
     static final String[] sfxPath = new String[NSFX], vPath = new String[NVOICE], mPath = new String[NMUS];
@@ -158,6 +170,7 @@ final class Snd implements Runnable {
     }
 
     static void startWorker() {
+        heldNow = false;
         worker = new Snd(gen);
         new Thread(worker).start();
     }
@@ -218,14 +231,24 @@ final class Snd implements Runnable {
         }
     }
 
+    /** Effects and music take turns (the player's choice, or this phone can't mix them). */
+    static boolean turns() {
+        return fxTurns || autoTurns;
+    }
+
     static void sfx(int id) {
         if (!sfxOn || sampledDead || sfxPath[id] == null) return;
-        if (musicPlaying && noMix) return;                      // the music has the phone's only channel
         long now = System.currentTimeMillis();
         if (now < mutedUntil) return;
         if (now - lastPlay[id] < 70) return;
         lastPlay[id] = now;
         push(id);
+    }
+
+    /** A menu sound: when effects and music take turns, the music doesn't stop for a menu click. */
+    static void ui(int id) {
+        if (musicPlaying && turns()) return;
+        sfx(id);
     }
 
     static void sfxAt(int id, int x, int y) {
@@ -236,19 +259,22 @@ final class Snd implements Runnable {
 
     static void voice(int id) {
         if (!voiceOn || sampledDead || vPath[id] == null || System.currentTimeMillis() < mutedUntil) return;
-        if (musicPlaying && (noMix || calm >= 2)) return;
+        if (musicPlaying && calm >= 2 && !turns()) return;
         push(C_VOICE + id);
     }
 
     /** One short line about the audio, shown under the FPS counter, so a player can tell what their phone does:
-     *  whether the music is really playing, K how often it had to be restarted, W how many effects may play over it,
-     *  C how far the effects backed off after hangs, NOMIX if effects can't play over music, H audio hangs. */
+     *  whether the music is really playing (or PAUSED for an effect), K how often it had to be restarted, W how many
+     *  effects may play over it, C how far the effects backed off after hangs, NOMIX if effects can't play over music,
+     *  T how many breaks the music took for effects (taking turns; D: it lets go of the audio for them), H audio hangs. */
     static String status() {
-        StringBuffer b = new StringBuffer(!musicPlaying ? "NO MUSIC" : mSt == Player.STARTED ? "MUSIC ON" : "MUSIC STOPPED");
+        StringBuffer b = new StringBuffer(!musicPlaying ? "NO MUSIC" : heldNow ? "MUSIC PAUSED"
+                : mSt == Player.STARTED ? "MUSIC ON" : "MUSIC STOPPED");
         if (musicKicks > 0) b.append(" K").append(musicKicks);
         if (maxWav < 99) b.append(" W").append(maxWav);
         if (calm > 0) b.append(" C").append(calm);
         if (noMix) b.append(" NOMIX");
+        if (turns()) b.append(" T").append(musicPauses).append(deep ? "D" : "");
         if (restarts > 0) b.append(" H").append(restarts);
         return b.toString();
     }
@@ -261,7 +287,7 @@ final class Snd implements Runnable {
     static int effective(int id) {
         if (id < 0 || musicMode == MUS_OFF || musicDead) return -1;
         if (musicMode == MUS_MENUS && (id == M_CUT || (id >= M_L1 && id < M_WIN) || id >= M_L13)) return -1;
-        if (id == M_CUT && (noMix || calm >= 2)) return -1;     // a cutscene is about its voices: they get the channel
+        if (id == M_CUT && (turns() || calm >= 2)) return -1;   // a cutscene is about its voices: they get the channel
         return id;
     }
 
@@ -323,7 +349,7 @@ final class Snd implements Runnable {
                     // the effects back off: fewer players, then no new ones but the gun's (and no voices) over it
                     mixHangs++;
                     if (plimit > 3) plimit = 3;
-                    if (calm < 2 && ++calm == 2) note = "SOUND TROUBLE: FEWER EFFECTS DURING MUSIC (SEE OPTIONS)";
+                    if (calm < 2 && ++calm == 2) note = "SOUND TROUBLE: FEWER EFFECTS DURING MUSIC (TRY OPTIONS: FX + MUSIC)";
                 } else if (++sfxHangs >= 4) {
                     sampledDead = true;          // effects and voices off for this session, music stays
                 } else {
@@ -377,7 +403,7 @@ final class Snd implements Runnable {
             synchronized (lock) {
                 if (!alive || gen != myGen) break;
                 if (qh == qt) {
-                    try { lock.wait(500); } catch (InterruptedException e) { }
+                    try { lock.wait(held ? 60 : 500); } catch (InterruptedException e) { }
                     if (!alive || gen != myGen) break;
                 }
                 if (qh != qt) {
@@ -422,12 +448,8 @@ final class Snd implements Runnable {
                 if ((played || (cmd >= C_VOICE && cmd < C_MUSIC)) && music != null && state(music) == Player.STARTED) mixFails = 0;
                 keep();
             } catch (Throwable t) {
-                if (cmd >= 0 && cmd < C_MUSIC && music != null && state(music) == Player.STARTED && ++mixFails >= 4 && !noMix) {
-                    // every effect fails while the MIDI plays: this phone can't mix. The music keeps playing and the
-                    // effects wait for it (Options -> music in menus only brings them back)
-                    noMix = true;
-                    note = "NO SOUND MIXING: NO EFFECTS DURING MUSIC (SEE OPTIONS)";
-                }
+                if (cmd >= 0 && cmd < C_MUSIC && music != null && state(music) == Player.STARTED && ++mixFails >= 4 && !noMix)
+                    noMixFound();       // every effect fails while the MIDI plays (even loading one): this phone can't mix
                 if (cmd >= 0 && cmd < C_MUSIC && ++fails > 12) {
                     fails = 0;
                     mutedUntil = System.currentTimeMillis() + 5000;   // stop hammering, retry in 5 s
@@ -481,6 +503,107 @@ final class Snd implements Runnable {
         if (voiceP != null && state(voiceP) != Player.STARTED) { kill(voiceP); voiceP = null; }
     }
 
+    /** This phone can't play effects over the music: on AUTO they take turns from now on (for the session). */
+    static void noMixFound() {
+        noMix = true;
+        if (!turns()) {
+            autoTurns = true;
+            note = "NO SOUND MIXING: MUSIC PAUSES FOR EFFECTS";
+        }
+    }
+
+    // ---------------- taking turns
+
+    boolean held;                           // the music is on a break while sampled sounds play
+    long heldMt = -1;                       // where it was stopped (us)
+    long quietT, lastStartT;                // last time a sampled sound was seen playing / was started
+
+    /** Mark a stretch of MIDI work: a hang in there counts as a music hang (see poll). Returns what to put back. */
+    int asMusic() {
+        synchronized (lock) { int c = busyCmd; busyCmd = C_MUSIC + 1 + curMusic; return c; }
+    }
+
+    void notMusic(int c) {
+        synchronized (lock) { if (gen == myGen) busyCmd = c; }
+    }
+
+    static boolean tryStart(Player p) {
+        try { p.start(); return true; } catch (Throwable t) { return false; }
+    }
+
+    /** Taking turns: stop the music right where it is so a sampled sound gets the phone's audio to itself. Any sampled
+     *  sound still playing is stopped first (see the class comment). */
+    void pauseMusic() {
+        if (held || music == null || !musicPlaying) return;
+        boolean on = state(music) == Player.STARTED;
+        if (!on && !musicLoop) return;                   // a jingle that has finished: nothing to pause
+        held = heldNow = true;
+        quietT = System.currentTimeMillis();
+        heldMt = -1;
+        if (!on) return;                                 // the phone stopped it already: it waits like this
+        if (playing() > 0) {
+            stopOthers(-1);
+            if (voiceP != null) try { voiceP.stop(); } catch (Throwable t) { }
+        }
+        int bc = asMusic();
+        try { heldMt = music.getMediaTime(); } catch (Throwable t) { }
+        try { music.stop(); } catch (Throwable t) { }
+        if (deep) try { music.deallocate(); } catch (Throwable t) { }
+        notMusic(bc);
+        musicPauses++;
+        mSt = state(music);
+    }
+
+    /** Taking turns: once no sampled sound has played for a moment (GAP), the music goes on where it stopped. Called
+     *  between commands (keep), never in the middle of starting a sound. */
+    void resumeMusic() {
+        if (music == null || !musicPlaying) { held = heldNow = false; return; }
+        long now = System.currentTimeMillis();
+        if (playing() > 0) {
+            if (now - lastStartT < 8000) { quietT = now; return; }
+            stopOthers(-1);                              // a sound that never says it has ended: the music waited enough
+            if (voiceP != null) try { voiceP.stop(); } catch (Throwable t) { }
+        }
+        if (now - quietT < GAP) return;
+        held = heldNow = false;
+        int bc = asMusic();
+        try {
+            if (music.getState() < Player.PREFETCHED) music.prefetch();
+            // a phone that rewinds a stopped MIDI (or forgets where it was when it lets go of the audio) is put back
+            long t = heldMt, d = music.getDuration();
+            if (d > 0 && t > d) t %= d;
+            if (t > 0 && music.getMediaTime() < t - 100000) music.setMediaTime(t);
+        } catch (Throwable e) { }
+        try { music.start(); } catch (Throwable e) { }
+        notMusic(bc);
+        mSt = state(music);
+        keepT = now;                                     // keep() gives it a moment before it judges
+        lastMt = -1;
+    }
+
+    /** A sampled sound won't start while the MIDI plays: give it the phone's audio (the music takes a break and comes
+     *  back afterwards, see resumeMusic). If stopping the music isn't enough, the MIDI lets go of the audio entirely.
+     *  A few of these in a row and this phone can't mix: on AUTO they take turns from now on. */
+    boolean breakFor(Player p) {
+        // (another sampled sound still playing has the channel: that's a one-channel phone, not the music's fault)
+        if (music == null || !musicPlaying || playing() > 0) return false;
+        boolean was = held;
+        if (!held) {
+            if (state(music) != Player.STARTED) return false;
+            pauseMusic();
+        }
+        if (!tryStart(p)) {
+            if (deep) return false;
+            int bc = asMusic();
+            try { music.deallocate(); } catch (Throwable t) { }
+            notMusic(bc);
+            if (!tryStart(p)) return false;
+            deep = true;
+        }
+        if (!was && ++mixFails >= 3 && !noMix) noMixFound();
+        return true;
+    }
+
     /** Sampled sounds playing right now. */
     int playing() {
         int n = voiceP != null && state(voiceP) == Player.STARTED ? 1 : 0;
@@ -517,10 +640,23 @@ final class Snd implements Runnable {
     /** Starting a sampled sound just stopped the music: the phone ran out of channels and took the music's. Play
      *  fewer sounds at once over the music from now on, and give it its channel back. */
     void stolen() {
+        if (playing() <= 1 && soloSteal()) return;
         int n = playing() - 1;
         if (n < 1) n = 1;
         if (n < maxWav) maxWav = n;
         kick();
+    }
+
+    /** A lone effect took the music's channel (the phone stopped the MIDI for it, at once or a moment later): twice,
+     *  and this phone can't mix them, so they take turns from now on. The music is stopped already: it waits right
+     *  there and goes on when the effects are done. */
+    boolean soloSteal() {
+        if (atEnd() || ++soloSteals < 2 || turns()) return false;
+        noMixFound();
+        held = heldNow = true;
+        try { heldMt = music.getMediaTime(); } catch (Throwable t) { heldMt = -1; }
+        quietT = lastStartT = System.currentTimeMillis();
+        return true;
     }
 
     void kick() {
@@ -534,6 +670,7 @@ final class Snd implements Runnable {
     /** Keep the music going: if the phone stopped it on its own (took its channel for an effect, ignored the loop
      *  count, paused it for something of its own), start it again where it stopped, as soon as there is room. */
     void keep() {
+        if (held) { resumeMusic(); return; }
         if (music == null || !musicPlaying || !musicLoop) return;
         long now = System.currentTimeMillis();
         if (now - keepT < 600) return;
@@ -553,7 +690,10 @@ final class Snd implements Runnable {
         if (!end && (n > 0 || now - peakT < 2000)) {
             // stopped in the middle of the track while effects play: the phone took its channel for one of them (and
             // only said so late): play fewer at once over the music than were playing then
-            int m = (now - peakT < 2000 && peak > n ? peak : n) - 1;
+            int pk = now - peakT < 2000 && peak > n ? peak : n;
+            // (only when an effect started over music that was really playing, and restarts have been taking)
+            if (pk <= 1 && now - peakT < 2000 && kickFails == 0 && soloSteal()) return;
+            int m = pk - 1;
             if (m < 1) m = 1;
             if (m < maxWav) maxWav = m;
         }
@@ -584,7 +724,7 @@ final class Snd implements Runnable {
         idle();
         long now = System.currentTimeMillis();
         boolean imp = important(id);
-        if (musicPlaying && !prio(id) && (calm >= 2 || now - lastCreate < (imp ? 500 : 1200))) return -1;
+        if (musicPlaying && !held && !prio(id) && (calm >= 2 || now - lastCreate < (imp ? 500 : 1200))) return -1;
         int used = 0, slot = -1;
         for (int i = 0; i < PMAX; i++) {
             if (pp[i] != null && state(pp[i]) == Player.CLOSED) { pp[i] = null; pid[i] = -1; }
@@ -648,7 +788,10 @@ final class Snd implements Runnable {
         }
         int slot = free;
         // still playing: open another copy rather than restarting it (a restart is lost on many emulators)
-        if (slot < 0 && n < copies(id)) slot = load(id);
+        if (slot < 0 && n < copies(id)) {
+            if (turns()) pauseMusic();                  // (loading while the MIDI plays is what hangs some phones)
+            slot = load(id);
+        }
         boolean restart = false;
         if (slot < 0) {
             // every copy is busy: only the player's own gun (or a one-channel phone) cuts its sound short
@@ -661,6 +804,7 @@ final class Snd implements Runnable {
             if (voiceP != null && state(voiceP) == Player.STARTED) return false;   // a voice line has the only channel
             stopOthers(slot);
         }
+        if (turns()) pauseMusic();
         boolean mOn = musicOn();
         if (mOn && maxWav < 99 && playing() - (restart ? 1 : 0) >= maxWav) {
             // as many sounds as this phone can play over the music: only the gun gets one, by cutting another short
@@ -673,13 +817,17 @@ final class Snd implements Runnable {
         try {
             p.start();
         } catch (Exception e) {
-            // maybe the phone can't mix two sampled sounds: free the channel; twice in a row and that's what it is
-            if (oneChannel || !stopOthers(slot)) throw e;
-            p.start();
-            if (++oneChanHits >= 2) oneChannel = true;
+            // maybe the phone can't mix two sampled sounds: free the channel; twice in a row and that's what it is.
+            // Or it can't play one over the music: the music takes a break for it (breakFor)
+            boolean ok = false;
+            if (!oneChannel && stopOthers(slot)) {
+                ok = tryStart(p);
+                if (ok && ++oneChanHits >= 2) oneChannel = true;
+            }
+            if (!ok && !breakFor(p)) throw e;
         }
-        puse[slot] = System.currentTimeMillis();
-        if (mOn) {
+        puse[slot] = lastStartT = quietT = System.currentTimeMillis();
+        if (mOn && !held) {
             notePeak();
             if (state(music) != Player.STARTED) stolen();
         }
@@ -688,6 +836,7 @@ final class Snd implements Runnable {
 
     void doVoice(int id) throws Exception {
         if (voiceP != null) { kill(voiceP); voiceP = null; }
+        if (turns()) pauseMusic();
         Player p;
         try {
             p = create(vPath[id]);
@@ -699,8 +848,13 @@ final class Snd implements Runnable {
         voiceP = p;
         boolean mOn = musicOn();
         if (mOn && maxWav < 99) while (playing() >= maxWav && makeRoom(-1)) { }
-        p.start();
-        if (mOn) {
+        try {
+            p.start();
+        } catch (Exception e) {
+            if (!breakFor(p)) throw e;
+        }
+        lastStartT = quietT = System.currentTimeMillis();
+        if (mOn && !held) {
             notePeak();
             if (state(music) != Player.STARTED) stolen();
         }
@@ -708,13 +862,19 @@ final class Snd implements Runnable {
 
     void doMusic(int id) throws Exception {
         if (music != null && curMusic == id && state(music) != Player.CLOSED) {
-            if (state(music) != Player.STARTED) music.start();
             musicPlaying = true;
+            if (held) return;                            // on a break for an effect: it goes on by itself
+            if (state(music) < Player.PREFETCHED) {      // (it had let go of the audio for an effect)
+                music.prefetch();
+                try { if (heldMt > 0) music.setMediaTime(heldMt); } catch (Throwable t) { }
+            }
+            if (state(music) != Player.STARTED) music.start();
             return;
         }
         // silence every WAV before touching the MIDI player: stopping a MIDI while a WAV plays
         // freezes the audio system on many phones (the old "music never stops after death" bug)
         flush(true);
+        held = heldNow = false;
         if (music != null) { musicPlaying = false; kill(music); music = null; curMusic = -1; }
         if (id < 0 || mPath[id] == null) return;
         Player p;
@@ -739,6 +899,7 @@ final class Snd implements Runnable {
 
     void doStop() {
         flush(true);
+        held = heldNow = false;
         if (music != null) { musicPlaying = false; try { music.stop(); } catch (Throwable t) { } }
     }
 }

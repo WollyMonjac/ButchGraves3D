@@ -170,10 +170,100 @@ final class G extends GameCanvas implements Runnable {
         return Image.createRGBImage(d, w, h, false);
     }
 
+    // screen size (Options): like Doom's, the 3D view can be shrunk to run faster on a slow phone. It stays centred
+    // above the status bar, framed by a dark border in the episode's own stone, canvas or metal. Cutscenes always fill
+    // the screen. At 60% the view has about a third of the pixels to draw.
+    static final int[] VIEW_PCT = {100, 90, 80, 70, 60};
+    static int viewSize;
+
     static void setupView() {
         hudH = SH >= 300 ? 42 : SH >= 200 ? 32 : 24;
         if (faceSz == 36 && hudH < 40) hudH = 40;
-        E.setup(SW, SH, SH - hudH, detail);
+        int ah = SH - hudH;                               // the area above the status bar
+        int pct = state == S_CUT ? 100 : VIEW_PCT[viewSize];
+        int vw = SW, vh = ah;
+        if (pct < 100) { vw = (SW * pct / 100) & ~1; vh = (ah * pct / 100) & ~1; }
+        E.setup(vw, SH, vh, detail);
+        E.VX = (SW - vw) / 2;
+        E.VY = (ah - vh) / 2;
+    }
+
+    static Image borderTile;
+    static int borderLevel = -1;
+    // the border's texture by episode (the first one the level has loaded), else the level's most used wall
+    static final int[][] BORDER_TEX = {{Res.T_CRYPT, Res.T_STONE, Res.T_BRICK}, {Res.T_TENT, Res.T_TENT2, Res.T_SIDING},
+            {Res.T_CASTLE, Res.T_ROCKMOSS, Res.T_SWAMPWOOD}, {Res.T_TECHWALL, Res.T_TECHWALL2, Res.T_RUST},
+            {Res.T_TSTONE, Res.T_ADOBE, Res.T_XSTONE}};
+
+    /** One 64x64 tile of the border: a wall texture of this level, darkened so it doesn't draw the eye. */
+    static Image makeBorderTile() {
+        int id = -1, ep = epOf(W.level) - 1;
+        if (ep >= 0 && ep < BORDER_TEX.length)
+            for (int k = 0; k < BORDER_TEX[ep].length && id < 0; k++) if (isTile(BORDER_TEX[ep][k])) id = BORDER_TEX[ep][k];
+        if (id < 0) {
+            int[] n = new int[E.tex.length];
+            for (int c = 0; c < 4096; c++) {
+                int w = (W.wall[c] & 255) - 1;
+                if (w >= 0 && w < n.length && (W.flag[c] & (W.F_DOOR | W.F_SECRET | W.F_EXIT)) == 0) n[w]++;
+            }
+            for (int t = 0; t < n.length; t++) if (n[t] > 0 && isTile(t) && (id < 0 || n[t] > n[id])) id = t;
+        }
+        if (id < 0) return null;
+        byte[] t = E.tex[id];
+        int[] rgb = new int[4096];
+        for (int x = 0; x < 64; x++)
+            for (int y = 0; y < 64; y++) {
+                int p = E.pal[t[(x << 6) + y] & 255];
+                rgb[(y << 6) + x] = 0xff000000 | ((((p >> 16) & 255) * 6 >> 4) << 16) | ((((p >> 8) & 255) * 6 >> 4) << 8) | ((p & 255) * 6 >> 4);
+            }
+        return Image.createRGBImage(rgb, 64, 64, false);
+    }
+
+    static boolean isTile(int t) {
+        return t >= 0 && t < E.tex.length && E.tex[t] != null && E.texW[t] == 64 && E.texH[t] == 64;
+    }
+
+    /** The frame around a shrunk view: the border tiles (only around the view, never under it) and a bevelled rim in
+     *  the status bar's colours. */
+    static void drawBorder(Graphics gr) {
+        int vx = E.VX, vy = E.VY, vw = E.VW, vh = E.VH, ah = SH - hudH;
+        if (borderLevel != W.level) {
+            borderLevel = W.level;
+            borderTile = null;
+            try { borderTile = makeBorderTile(); } catch (Throwable t) { }
+        }
+        borderRect(gr, 0, 0, SW, vy);
+        borderRect(gr, 0, vy + vh, SW, ah - vy - vh);
+        borderRect(gr, 0, vy, vx, vh);
+        borderRect(gr, vx + vw, vy, SW - vx - vw, vh);
+        gr.setClip(0, 0, SW, SH);
+        gr.setColor(0x000000);
+        gr.drawRect(vx - 1, vy - 1, vw + 1, vh + 1);
+        gr.setColor(0x601c04);
+        gr.drawRect(vx - 3, vy - 3, vw + 5, vh + 5);
+        gr.setColor(0xff7010);                            // lit from the top left, like the status bar's rim
+        gr.drawLine(vx - 2, vy - 2, vx + vw + 1, vy - 2);
+        gr.drawLine(vx - 2, vy - 2, vx - 2, vy + vh + 1);
+        gr.setColor(0xa04010);
+        gr.drawLine(vx - 1, vy + vh + 1, vx + vw + 1, vy + vh + 1);
+        gr.drawLine(vx + vw + 1, vy - 1, vx + vw + 1, vy + vh + 1);
+        gr.setColor(0x806050);                            // rivets in the corners
+        if (vx >= 8 && vy >= 8) {
+            gr.fillRect(vx - 7, vy - 7, 2, 2); gr.fillRect(vx + vw + 5, vy - 7, 2, 2);
+            gr.fillRect(vx - 7, vy + vh + 5, 2, 2); gr.fillRect(vx + vw + 5, vy + vh + 5, 2, 2);
+        }
+    }
+
+    static void borderRect(Graphics gr, int x, int y, int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        gr.setClip(x, y, w, h);
+        if (borderTile == null) {
+            gr.setColor(0x180c08);
+            gr.fillRect(x, y, w, h);
+            return;
+        }
+        for (int ty = y & ~63; ty < y + h; ty += 64)
+            for (int tx = x & ~63; tx < x + w; tx += 64) gr.drawImage(borderTile, tx, ty, Graphics.TOP | Graphics.LEFT);
     }
 
     void resize() {
@@ -279,6 +369,7 @@ final class G extends GameCanvas implements Runnable {
     static void setState(int s) {
         prevState = state;
         state = s;
+        if (viewSize > 0 && (prevState == S_CUT) != (s == S_CUT)) setupView();   // cutscenes fill the screen
         stateTick = 0;
         sel = 0;
         pressed = 0;
@@ -405,7 +496,7 @@ final class G extends GameCanvas implements Runnable {
         nav(10);
         int d = hit(K_RIGHT) ? 1 : hit(K_LEFT) ? -1 : 0;
         if (d != 0) {
-            Snd.sfx(Snd.CLICK);
+            Snd.ui(Snd.CLICK);
             switch (sel) {
                 case 0: testCut = (testCut + NEP - 1 + d) % NEP + 1; break;
                 case 1: gore = !gore; saveOptions(); break;
@@ -417,7 +508,7 @@ final class G extends GameCanvas implements Runnable {
             }
         }
         if (hit(K_FIRE | K_USE)) {
-            Snd.sfx(Snd.CLICK);
+            Snd.ui(Snd.CLICK);
             switch (sel) {
                 case 0: testFromMenu = true; testPlayAll = false; testGear(); startCut(testCut); break;
                 case 1: gore = !gore; saveOptions(); break;
@@ -462,8 +553,8 @@ final class G extends GameCanvas implements Runnable {
     static final String[] TITLE_ITEMS = {"NEW GAME", "CONTINUE", "OPTIONS", "CONTROLS", "EXIT"};
 
     static int nav(int n) {
-        if (hit(K_UP)) { sel = (sel + n - 1) % n; Snd.sfx(Snd.CLICK); }
-        if (hit(K_DOWN)) { sel = (sel + 1) % n; Snd.sfx(Snd.CLICK); }
+        if (hit(K_UP)) { sel = (sel + n - 1) % n; Snd.ui(Snd.CLICK); }
+        if (hit(K_DOWN)) { sel = (sel + 1) % n; Snd.ui(Snd.CLICK); }
         return sel;
     }
 
@@ -479,7 +570,7 @@ final class G extends GameCanvas implements Runnable {
                         W.skill = saveSkill;
                         restoreStart();
                         beginLevel(saveLevel, false);
-                    } else Snd.sfx(Snd.CLICK);
+                    } else Snd.ui(Snd.CLICK);
                     break;
                 case 2: optReturn = S_TITLE; setState(S_OPT); break;
                 case 3: optReturn = S_TITLE; setState(S_HELP); break;
@@ -543,35 +634,53 @@ final class G extends GameCanvas implements Runnable {
     static boolean gore;                      // cutscene style: false = classic (funny), true = gory (Duke style)
 
     static String[] optItems() {
-        return new String[]{"DETAIL: " + DETAIL[detail], "MUSIC: " + (Snd.musicMode == Snd.MUS_ON ? "ON" : Snd.musicMode == Snd.MUS_MENUS ? "MENUS ONLY" : "OFF"), "SOUND FX: " + (Snd.sfxOn ? "ON" : "OFF"),
+        return new String[]{"DETAIL: " + DETAIL[detail], "SCREEN SIZE: " + (viewSize == 0 ? "FULL" : VIEW_PCT[viewSize] + "%"), "MUSIC: " + (Snd.musicMode == Snd.MUS_ON ? "ON" : Snd.musicMode == Snd.MUS_MENUS ? "MENUS ONLY" : "OFF"),
+                "FX + MUSIC: " + (Snd.fxTurns ? "TAKE TURNS" : Snd.autoTurns ? "AUTO (TURNS)" : "AUTO"), "SOUND FX: " + (Snd.sfxOn ? "ON" : "OFF"),
                 "VOICE: " + (Snd.voiceOn ? "ON" : "OFF"), "VIBRATION: " + (vibe ? "ON" : "OFF"), "CROSSHAIR: " + (crosshair ? "ON" : "OFF"),
                 "FPS COUNTER: " + (showFps ? "ON" : "OFF"), "CUTSCENES: " + (gore ? "GORY" : "CLASSIC"), "BACK"};
     }
 
+    /** Shorter labels for narrow screens (only where they differ). */
+    static String[] optItemsShort() {
+        String[] s = optItems();
+        s[1] = "SCREEN: " + (viewSize == 0 ? "FULL" : VIEW_PCT[viewSize] + "%");
+        s[3] = "FX+MUSIC: " + (Snd.turns() ? "TURNS" : "AUTO");
+        return s;
+    }
+
     static void menuOpt() {
-        nav(9);
+        nav(11);
+        boolean back = (pressed & K_LEFT) != 0;             // 4 / left steps the screen size back
         boolean act = hit(K_FIRE | K_USE | K_LEFT | K_RIGHT);
-        if (hit(K_BACK | K_MENU) || (act && sel == 8)) {
+        if (hit(K_BACK | K_MENU) || (act && sel == 10)) {
             saveOptions();
             setState(optReturn);
             if (optReturn == S_PAUSE) sel = 2;
             return;
         }
         if (!act) return;
-        Snd.sfx(Snd.CLICK);
+        Snd.ui(Snd.CLICK);
         switch (sel) {
             case 0: detail = (detail + 1) % 3; setupView(); break;
-            case 1:     // on -> menus only -> off
+            case 1:     // full -> 90% -> ... -> 60% -> full (left goes the other way)
+                viewSize = (viewSize + (back ? VIEW_PCT.length - 1 : 1)) % VIEW_PCT.length;
+                setupView();
+                break;
+            case 2:     // on -> menus only -> off
                 Snd.musicMode = Snd.musicMode == Snd.MUS_ON ? Snd.MUS_MENUS : Snd.musicMode == Snd.MUS_MENUS ? Snd.MUS_OFF : Snd.MUS_ON;
                 Snd.wantMusic = optReturn == S_TITLE ? Snd.M_TITLE : W.lvMusic;
                 Snd.resume();
                 break;
-            case 2: Snd.sfxOn = !Snd.sfxOn; break;
-            case 3: Snd.voiceOn = !Snd.voiceOn; break;
-            case 4: vibe = !vibe; break;
-            case 5: crosshair = !crosshair; break;
-            case 6: showFps = !showFps; break;
-            case 7: gore = !gore; break;
+            case 3:     // auto (mix, take turns if the phone can't) -> take turns -> auto (finds out again)
+                Snd.fxTurns = !Snd.fxTurns;
+                Snd.autoTurns = false;
+                break;
+            case 4: Snd.sfxOn = !Snd.sfxOn; break;
+            case 5: Snd.voiceOn = !Snd.voiceOn; break;
+            case 6: vibe = !vibe; break;
+            case 7: crosshair = !crosshair; break;
+            case 8: showFps = !showFps; break;
+            case 9: gore = !gore; break;
         }
     }
 
@@ -668,12 +777,12 @@ final class G extends GameCanvas implements Runnable {
         boolean typed = (stateTick - pageTick) * 2 >= pageLen;
         if (hit(K_BACK | K_MENU)) { endStory(); return; }
         if (hit(K_UP)) {
-            if (page > 0) { page--; pageTick = stateTick - 1000; Snd.sfx(Snd.CLICK); }
+            if (page > 0) { page--; pageTick = stateTick - 1000; Snd.ui(Snd.CLICK); }
             return;
         }
         if (hit(K_FIRE | K_USE | K_DOWN)) {
             if (!typed) { pageTick = stateTick - 1000; return; }
-            if (page < pages.length - 1) { page++; pageTick = stateTick; Snd.sfx(Snd.CLICK); return; }
+            if (page < pages.length - 1) { page++; pageTick = stateTick; Snd.ui(Snd.CLICK); return; }
             endStory();
         }
     }
@@ -1845,7 +1954,7 @@ final class G extends GameCanvas implements Runnable {
             if (f >= 8 && f < 14) y += (14 - f) * ((f & 1) == 0 ? 1 : -1);
             if (capImg != null) gr.drawImage(capImg, SW / 2, y, Graphics.TOP | Graphics.HCENTER);
             gr.setFont(fSmall);
-            if (f > 14) outline(gr, clip("EPISODE " + capEp + " COMPLETE", fSmall, SW - 6), SW / 2, y + ch + 4, 0xffd080, Graphics.TOP | Graphics.HCENTER);
+            if (f > 14) wrapC(gr, "EPISODE " + capEp + " COMPLETE", SW / 2, y + ch + 4, SW - 6, 0xffd080, fSmall);
         }
     }
 
@@ -1861,7 +1970,8 @@ final class G extends GameCanvas implements Runnable {
                 if (warp > 1 || W.god) {
                     gr.setFont(fSmall);
                     String wt = (warp > 1 ? "WARP TO LEVEL " + (firstLevel(episode) + warp - 1) + "  " : "") + (W.god ? "GOD MODE" : "");
-                    outline(gr, clip(wt, fSmall, SW - 6), SW / 2, SH - fSmall.getHeight() - 4, 0xc080ff, Graphics.TOP | Graphics.HCENTER);
+                    int wh = wrapC(null, wt, 0, 0, SW - 6, 0, fSmall);
+                    wrapC(gr, wt, SW / 2, SH - wh - 4, SW - 6, 0xc080ff, fSmall);
                 }
                 break;
             case S_STORY: case S_END: drawStory(gr); break;
@@ -1871,7 +1981,7 @@ final class G extends GameCanvas implements Runnable {
             case S_MAP: drawMap(gr); break;
             case S_OPT:
                 if (optReturn == S_PAUSE) { drawGame(gr); dim(gr); } else drawBg(gr, true);
-                drawMenuItems(gr, "OPTIONS", optItems(), SH / 5);
+                drawMenuItems(gr, "OPTIONS", optItems(), optItemsShort(), SH / 5);
                 break;
             case S_HELP: drawHelp(gr); break;
             case S_TEST:
@@ -1987,12 +2097,24 @@ final class G extends GameCanvas implements Runnable {
         gr.setFont(f);
         if (lh < f.getHeight()) lh = f.getHeight();
         int mw = f.stringWidth("> <  ");
-        for (int i = 0; i < items.length; i++) {
+        // more items than fit on this screen: show a window that follows the selection, with arrows for the rest
+        int n = items.length, first = 0, show = n, room = (SH - 2 - y) / lh;
+        if (room < n && room > 1) {
+            show = room;
+            first = sel - show / 2;
+            if (first > n - show) first = n - show;
+            if (first < 0) first = 0;
+            gr.setColor(0xff7010);
+            int ax = SW - 5, ah = f.getHeight() / 3 + 1;
+            if (first > 0) gr.fillTriangle(ax, y, ax - ah, y + ah, ax + ah, y + ah);
+            if (first + show < n) { int by = y + (show - 1) * lh + f.getHeight(); gr.fillTriangle(ax, by, ax - ah, by - ah, ax + ah, by - ah); }
+        }
+        for (int i = first; i < first + show; i++) {
             String t = items[i];
             if (f.stringWidth(t) > w && alt != null && f.stringWidth(alt[i]) <= w) t = alt[i];
             boolean sl = i == sel;
             int col = sl ? ((tick & 4) != 0 ? 0xffe060 : 0xffa020) : (grey != null && grey[i] ? 0x705850 : 0xd8c8b0);
-            int yy = y + i * lh;
+            int yy = y + (i - first) * lh;
             int tw = f.stringWidth(t);
             if (sl && tw + mw > w) {                            // no room for the markers: a highlight bar instead
                 gr.setColor(0x501a08);
@@ -2173,6 +2295,32 @@ final class G extends GameCanvas implements Runnable {
         return y;
     }
 
+    /** Where the line that starts at i ends when it must fit w (at a space if there is one). */
+    static int lineEnd(String s, int i, int w, Font f) {
+        int n = s.length(), e = i, lastSp = -1;
+        while (e < n) {
+            if (s.charAt(e) == ' ') lastSp = e;
+            if (f.substringWidth(s, i, e - i + 1) > w) break;
+            e++;
+        }
+        if (e < n && lastSp > i) e = lastSp;
+        return e > i ? e : i + 1;
+    }
+
+    /** Text centred on cx and broken into as many lines as it needs to fit w, instead of being cut off. Returns the
+     *  height used (without a Graphics it only measures). */
+    static int wrapC(Graphics gr, String s, int cx, int y, int w, int col, Font f) {
+        int lh = f.getHeight(), y0 = y, i = 0, n = s.length();
+        while (i < n) {
+            int e = lineEnd(s, i, w, f);
+            if (gr != null) outline(gr, s.substring(i, e), cx, y, col, Graphics.TOP | Graphics.HCENTER);
+            y += lh;
+            i = e;
+            while (i < n && s.charAt(i) == ' ') i++;
+        }
+        return y - y0;
+    }
+
     /** Draw a title centred at y in the biggest font that fits (two lines if needed). Returns the height used. */
     static int title(Graphics gr, String s, int y, int col) {
         Font[] fs = {fBig, fMed, fSmall};
@@ -2203,7 +2351,9 @@ final class G extends GameCanvas implements Runnable {
         gr.setColor(0x050205);
         gr.fillRect(0, 0, SW, SH);
         gr.setFont(fSmall);
-        outline(gr, clip(W.lvSub, fSmall, SW - 6), SW / 2, SH / 2 - fBig.getHeight() - 10, 0xb08070, Graphics.TOP | Graphics.HCENTER);
+        // the episode line over the title: a long one takes more lines (growing upwards) rather than being cut off
+        int sh = wrapC(null, W.lvSub, 0, 0, SW - 6, 0, fSmall);
+        wrapC(gr, W.lvSub, SW / 2, SH / 2 - fBig.getHeight() - 10 - (sh - fSmall.getHeight()), SW - 6, 0xb08070, fSmall);
         int th = title(gr, W.lvName, SH / 2 - 8, 0xff6a10);
         gr.setFont(fSmall);
         String sk = W.skill == 0 ? "Trick" : W.skill == 1 ? "Treat" : "Nightmare";
@@ -2240,8 +2390,9 @@ final class G extends GameCanvas implements Runnable {
         int th = centerText(gr, "BUTCH GOT BURIED", SH / 3, 0xff2010, SW >= 200 ? fBig : fMed);
         if (deadArmed) {
             gr.setFont(fSmall);
-            outline(gr, clip("5: dig yourself out", fSmall, SW - 6), SW / 2, SH / 3 + th + 6, 0xffc0a0, Graphics.TOP | Graphics.HCENTER);
-            outline(gr, "menu: quit", SW / 2, SH / 3 + th + 8 + fSmall.getHeight(), 0xa08070, Graphics.TOP | Graphics.HCENTER);
+            int y = SH / 3 + th + 6;
+            y += wrapC(gr, "5: dig yourself out", SW / 2, y, SW - 6, 0xffc0a0, fSmall) + 2;
+            outline(gr, "menu: quit", SW / 2, y, 0xa08070, Graphics.TOP | Graphics.HCENTER);
         }
     }
 
@@ -2275,6 +2426,7 @@ final class G extends GameCanvas implements Runnable {
         }
         if (!W.dead && !cut) drawWeapon();
         E.blit(gr);
+        if (!cut && (E.VW < SW || E.VH < SH - hudH)) drawBorder(gr);
         if (!cut && W.radioLvl > 0 && !W.dead && (W.lvFlags & W.LF_RADIO) != 0) drawStatic(gr);
         if (!cut) drawHud(gr);
         if (meltImg != null) drawMelt(gr);
@@ -2285,15 +2437,17 @@ final class G extends GameCanvas implements Runnable {
 
     /** The radio's static bleeds into the picture: the closer the monster, the more snow. */
     static void drawStatic(Graphics gr) {
-        int n = W.radioLvl * W.radioLvl * 3, vh = E.VH;
+        int n = W.radioLvl * W.radioLvl * 3, vh = E.VH, vw = E.VW;
+        gr.setClip(E.VX, E.VY, vw, vh);
         for (int k = 0; k < n; k++) {
             noiseSeed = noiseSeed * 1103515245 + 12345;
             int r = (noiseSeed >>> 8) & 0xffffff;
-            int y = r % vh, x = (r >> 9) % SW, w = 3 + (r >> 4) % (SW / 5 + 1);
+            int y = E.VY + r % vh, x = E.VX + (r >> 9) % vw, w = 3 + (r >> 4) % (vw / 5 + 1);
             int g = 0x70 + (r & 0x7f);
             gr.setColor((g << 16) | (g << 8) | g);
             gr.drawLine(x, y, x + w, y);
         }
+        gr.setClip(0, 0, SW, SH);
     }
 
     static void drawMelt(Graphics gr) {
@@ -2490,7 +2644,7 @@ final class G extends GameCanvas implements Runnable {
         // crosshair
         int vh = SH - hudH;
         if (crosshair && !W.dead) {
-            int cx = SW / 2, cy = vh / 2;
+            int cx = E.VX + E.VW / 2, cy = E.VY + E.VH / 2;
             gr.setColor(0xffd040);
             gr.drawLine(cx - 4, cy, cx - 2, cy);
             gr.drawLine(cx + 2, cy, cx + 4, cy);
@@ -2509,22 +2663,13 @@ final class G extends GameCanvas implements Runnable {
             gr.setColor(0xd02010); gr.fillRect(bx + 1, by + 1, hp, 3);
             gr.setColor(0xff8040); gr.drawRect(bx, by, bw - 1, 4);
             int t = W.tType[bi];
-            outline(gr, clip(t == W.BOSS ? "THE PUMPKIN KING" : t == W.GIGGLES ? "MISTER GIGGLES" : t == W.PRIME ? "FRANKENSTEIN PRIME" : t == W.SEVEN ? "SEVEN DEATH" : "COUNT HOLLOWFANG", fSmall, SW - 6), SW / 2, by + 7, 0xffb080,
-                    Graphics.TOP | Graphics.HCENTER);
-            my = by + 8 + fSmall.getHeight();
+            my = by + 8 + wrapC(gr, t == W.BOSS ? "THE PUMPKIN KING" : t == W.GIGGLES ? "MISTER GIGGLES" : t == W.PRIME ? "FRANKENSTEIN PRIME"
+                    : t == W.SEVEN ? "SEVEN DEATH" : "COUNT HOLLOWFANG", SW / 2, by + 7, SW - 6, 0xffb080, fSmall);
         }
         // messages
         for (int i = 0; i < 3; i++) {
             if (msgT[i] <= 0 || msgs[i] == null) continue;
-            String m = msgs[i];
-            if (fSmall.stringWidth(m) > SW - 6) {               // too long for this screen: break it at a space
-                int b = m.length() - 1;
-                while (b > 0 && (m.charAt(b) != ' ' || fSmall.substringWidth(m, 0, b) > SW - 6)) b--;
-                if (b > 0) { outline(gr, m.substring(0, b), 3, my, msgCol[i], Graphics.TOP | Graphics.LEFT); my += fSmall.getHeight(); m = m.substring(b + 1); }
-                m = clip(m, fSmall, SW - 6);
-            }
-            outline(gr, m, 3, my, msgCol[i], Graphics.TOP | Graphics.LEFT);
-            my += fSmall.getHeight();
+            my = wrap(gr, msgs[i], 3, my, SW - 6, msgCol[i], fSmall);    // (a long one takes more lines)
         }
         if (subT > 0 && subtitle != null) {
             int lh = fSmall.getHeight();
@@ -2590,9 +2735,10 @@ final class G extends GameCanvas implements Runnable {
         gr.setColor(0xffffff);
         gr.fillTriangle(x1, y1, x2, y2, x3, y3);
         gr.setFont(fSmall);
-        outline(gr, clip(W.lvName, fSmall, SW - 6), SW / 2, 2, 0xff8030, Graphics.TOP | Graphics.HCENTER);
-        outline(gr, clip("kills " + W.kills + "/" + W.totalKills + "  secrets " + W.secrets + "/" + W.totalSecrets, fSmall, SW - 4), SW / 2,
-                SH - fSmall.getHeight() - 2, 0xc0b0a0, Graphics.TOP | Graphics.HCENTER);
+        wrapC(gr, W.lvName, SW / 2, 2, SW - 6, 0xff8030, fSmall);
+        String st = "kills " + W.kills + "/" + W.totalKills + "  secrets " + W.secrets + "/" + W.totalSecrets;
+        int sth = wrapC(null, st, 0, 0, SW - 4, 0, fSmall);
+        wrapC(gr, st, SW / 2, SH - sth - 2, SW - 4, 0xc0b0a0, fSmall);
     }
 
     // ================================================================== persistence
@@ -2614,6 +2760,8 @@ final class G extends GameCanvas implements Runnable {
                         Snd.musicMode = b[1] % 3;
                         if ((b[9] & 1) != 0 && Snd.musicMode == Snd.MUS_MENUS) Snd.musicMode = Snd.MUS_ON;
                     } else Snd.musicMode = b[1] == 0 ? Snd.MUS_OFF : Snd.MUS_ON;
+                    if (b.length >= 11) Snd.fxTurns = b[10] != 0;     // byte 10: effects and music take turns
+                    if (b.length >= 12) viewSize = (b[11] & 255) % VIEW_PCT.length;   // byte 11: screen size
                 }
             }
             if (rs.getNumRecords() >= 2) {
@@ -2632,7 +2780,7 @@ final class G extends GameCanvas implements Runnable {
     static void saveOptions() {
         byte[] b = {(byte) detail, (byte) Snd.musicMode, (byte) (Snd.sfxOn ? 1 : 0), (byte) (Snd.voiceOn ? 1 : 0),
                 (byte) (vibe ? 1 : 0), (byte) (crosshair ? 1 : 0), (byte) (showFps ? 1 : 0), (byte) (gore ? 1 : 0), 2,
-                0};
+                0, (byte) (Snd.fxTurns ? 1 : 0), (byte) viewSize};
         write(1, b);
     }
 

@@ -16,6 +16,14 @@ public class GunTest {
         FakePlayer.modelY = model.indexOf('Y') >= 0;
         FakePlayer.modelZ = model.indexOf('Z') >= 0;
         FakePlayer.modelP = model.indexOf('P') >= 0;
+        FakePlayer.modelO = model.indexOf('O') >= 0;
+        FakePlayer.modelT = model.indexOf('T') >= 0;
+        FakePlayer.modelU = model.indexOf('U') >= 0;
+        FakePlayer.modelQ = model.indexOf('Q') >= 0;
+        FakePlayer.modelD = model.indexOf('D') >= 0;
+        FakePlayer.modelL = model.indexOf('L') >= 0;
+        FakePlayer.modelA = model.indexOf('A') >= 0;
+        Snd.fxTurns = System.getProperty("turns") != null;
         if (model.indexOf('S') >= 0) Manager.createDelayWav = 150;
         Random r = new Random(7);
         java.lang.reflect.Method wm = null;
@@ -24,6 +32,7 @@ public class GunTest {
         // (K: the player chose music by hand - no longer different: the engine never turns music off itself)
         Snd.music(Snd.M_L1);
         Thread.sleep(400);
+        long m0 = FakePlayer.musicMs(), w0 = System.currentTimeMillis();
         int[] guns = {Snd.REVOLVER, Snd.SHOTGUN, Snd.TOMMY};
         int[] every = {7, 22, 3};
         int[] mon = {Snd.ZOMBIE, Snd.SCARE, Snd.WITCH, Snd.CLOWN, Snd.SKEL, Snd.GHOST, Snd.WOLF, Snd.BAT};
@@ -50,6 +59,7 @@ public class GunTest {
                 Thread.sleep(50);              // the game ticks 20 times a second
             }
         }
+        long mus = (FakePlayer.musicMs() - m0) * 100 / (System.currentTimeMillis() - w0);
         Thread.sleep(500);
         int[] heard = new int[3];
         int lost = 0, busy = 0, other = 0;
@@ -72,12 +82,19 @@ public class GunTest {
         }
         int nomix = 0;
         for (String q : log) if (q.indexOf("START-NOMIX") >= 0) nomix++;
-        System.out.println(" total " + (100 * th / ta) + "%   other effects " + other + "   lost starts " + lost + "  busy " + busy
+        System.out.println(" total " + (100 * th / ta) + "%  MUSIC " + mus + "%" + turnsInfo() + "   other effects " + other + "   lost starts " + lost + "  busy " + busy
                 + (nomix > 0 ? "  no-mix failures " + nomix : "") + "  music mode " + Snd.musicMode + (Snd.note != null ? " (note: " + Snd.note + ")" : "") + " restarts " + Snd.restarts + (Snd.musicDead ? " musicDead" : "") + (Snd.sampledDead ? " sampledDead" : ""));
         java.io.PrintWriter pw = new java.io.PrintWriter("log_gun_" + model + ".txt");
         for (String s : log) pw.println(s);
         pw.close();
         System.exit(0);
+    }
+
+    static String turnsInfo() {
+        return (Snd.turns() ? (Snd.autoTurns ? "  AUTO-TURNS" : "  TURNS") + " pauses " + Snd.musicPauses : "")
+                + (FakePlayer.resumes + FakePlayer.topStarts > 0 ? "  resumed " + FakePlayer.resumes + " fromTop " + FakePlayer.topStarts : "")
+                + (FakePlayer.seeks > 0 ? " seeks " + FakePlayer.seeks : "") + (Snd.deep ? " DEEP" : "")
+                + "  music stretches " + FakePlayer.segs + " (" + FakePlayer.shortSegs + " under 1 s)";
     }
 
     static String pad(String s, int n) { while (s.length() < n) s += " "; return s; }

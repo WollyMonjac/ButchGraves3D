@@ -13,6 +13,11 @@ public class SndTest {
         FakePlayer.modelA = model.indexOf('A') >= 0;
         FakePlayer.modelC = model.indexOf('C') >= 0;
         if (model.indexOf('B') >= 0) FakePlayer.hangStartAt = 20;
+        FakePlayer.modelX = model.indexOf('X') >= 0;
+        FakePlayer.modelU = model.indexOf('U') >= 0;
+        FakePlayer.modelT = model.indexOf('T') >= 0;
+        FakePlayer.modelO = model.indexOf('O') >= 0;
+        Snd.fxTurns = System.getProperty("turns") != null;
         Method poll = find("poll"), newLevel = find("newLevel");
         boolean fixed = poll != null;
         Snd.init();

@@ -21,16 +21,32 @@ import java.util.*;
  *  D  like Q, but the music stops a moment (150 ms) after the effect started, as when the phone tells the MIDI
  *     player to give up its channel through its own event queue.
  *  L  "loop ignored": setLoopCount(-1) is ignored, the MIDI plays once (8 s here) and stops at its end.
- * Music uptime (how long a MIDI was really playing) is measured for every model: musicMs().
+ *  O  "one stream": like Q with a single audio stream: any WAV that starts takes the MIDI's channel.
+ *  T  "stop rewinds": stop() on the MIDI works like a full stop: started again, it plays from the top.
+ *  U  "one device": no WAV can start while a MIDI player holds the audio device (prefetched, even when stopped);
+ *     deallocate() lets go of it, and forgets where the MIDI was.
+ * Music uptime (how long a MIDI was really playing) is measured for every model: musicMs(); and how the music came
+ * back after it stopped: resumes (from where it was), topStarts (from the top again), seeks (setMediaTime).
  */
 public class FakePlayer implements Player {
     public static final long T0 = System.currentTimeMillis();
     public static final Object eng = new Object();
-    public static boolean modelA, modelC, modelR, modelM, modelX, modelY, modelZ, modelP, modelQ, modelL, modelD;
+    public static boolean modelA, modelC, modelR, modelM, modelX, modelY, modelZ, modelP, modelQ, modelL, modelD, modelO, modelT, modelU;
+    public static int resumes, topStarts, seeks;
     static long midiSince = -1, midiTotal;
     static final Vector<FakePlayer> midis = new Vector<FakePlayer>();
     static void midiUp() { if (midiPlaying++ == 0) midiSince = now(); }
-    static void midiDown() { if (--midiPlaying == 0 && midiSince >= 0) { midiTotal += now() - midiSince; midiSince = -1; } }
+    static void midiDown() {
+        if (--midiPlaying == 0 && midiSince >= 0) {
+            long d = now() - midiSince;
+            midiTotal += d;
+            midiSince = -1;
+            segs++;
+            if (d < 1000) shortSegs++;
+        }
+    }
+    /** Stretches of music so far, and how many of them were shorter than a second (choppy). */
+    public static int segs, shortSegs;
     /** Total ms some MIDI was really playing so far. */
     public static long musicMs() { synchronized (eng) { return midiTotal + (midiPlaying > 0 && midiSince >= 0 ? now() - midiSince : 0); } }
     public static int steals, loopEnds;
@@ -47,6 +63,7 @@ public class FakePlayer implements Player {
     volatile int state = UNREALIZED;
     int loops = 1, run;
     long lastStop = -1000;
+    boolean everStarted;
     long playStart, played;                    // ms of the track played (media time)
     boolean hung;
     final Vector<PlayerListener> ls = new Vector<PlayerListener>();
@@ -90,6 +107,9 @@ public class FakePlayer implements Player {
         if (!midi && modelR && now() - lastStop < 30) { log("START-LOST"); return; }
         if (!midi && modelM) synchronized (eng) { if (wavPlaying > 0) { log("START-BUSY"); throw new MediaException("busy"); } }
         if (!midi && modelX) synchronized (eng) { if (midiPlaying > 0) { log("START-NOMIX"); throw new MediaException("midi playing"); } }
+        if (!midi && modelU) synchronized (eng) {
+            for (int i = 0; i < midis.size(); i++) if (midis.elementAt(i).state >= PREFETCHED) { log("START-DEVICE"); throw new MediaException("device busy"); }
+        }
         if (midi && modelZ) synchronized (eng) { if (++midiStarts == 2) { hung = true; log("HANG-MIDI-START"); } }
         hangIfHung();
         if (midi) synchronized (eng) { midiUp(); }
@@ -100,8 +120,8 @@ public class FakePlayer implements Player {
             }
             hangIfHung();
             synchronized (eng) {
-                if ((modelQ || modelD) && wavPlaying + midiPlaying >= 3) {
-                    if (modelQ) stealMidi();
+                if ((modelQ || modelD || modelO) && wavPlaying + midiPlaying >= (modelO ? 1 : 3)) {
+                    if (modelQ || (modelO && !modelD)) stealMidi();     // (OD: one stream, the steal comes late)
                     else {
                         Thread t = new Thread() { public void run() { FakePlayer.sleep(150); synchronized (eng) { stealMidi(); } } };
                         t.setDaemon(true);
@@ -113,6 +133,7 @@ public class FakePlayer implements Player {
         }
         state = STARTED;
         if (midi && modelL && played >= 8000) played = 0;   // started again at the end: from the top
+        if (midi) synchronized (eng) { if (everStarted) { if (played > 0) resumes++; else topStarts++; } everStarted = true; }
         playStart = now();
         final int my = ++run;
         log("START");
@@ -159,11 +180,20 @@ public class FakePlayer implements Player {
         midiWaitForMixer();
         halt();
         state = PREFETCHED;
+        if (midi && modelT) played = 0;
         lastStop = now();
         log("STOP");
     }
 
-    public void deallocate() { }
+    public void deallocate() {
+        hangIfHung();
+        if (state == STARTED) try { stop(); } catch (MediaException e) { }
+        if (state != PREFETCHED) return;
+        synchronized (eng) { prefetched--; }
+        state = REALIZED;
+        if (midi && modelU) played = 0;
+        log("DEALLOCATE");
+    }
 
     public void close() {
         hangIfHung();
@@ -175,7 +205,15 @@ public class FakePlayer implements Player {
         log("CLOSE");
     }
 
-    public long setMediaTime(long t) throws MediaException { hangIfHung(); return 0; }
+    public long setMediaTime(long t) throws MediaException {
+        hangIfHung();
+        synchronized (eng) {
+            if (midi) seeks++;
+            played = t / 1000;
+            if (state == STARTED) playStart = now();
+        }
+        return t;
+    }
     public long getMediaTime() { return (played + (state == STARTED ? now() - playStart : 0)) * 1000; }
     public int getState() { return state; }
     public long getDuration() { return midi && modelL ? 8000000 : TIME_UNKNOWN; }

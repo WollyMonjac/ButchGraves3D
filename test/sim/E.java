@@ -295,6 +295,7 @@ final class E {
 
     // ------------------------------------------------------------------ view setup
     static int SW, SH, VW, VH, RW, RH, DX = 2, DY = 1;
+    static int VX, VY;                     // where the view sits on the screen (a shrunk view is centred, see G.setupView)
     static int[] buf, strip;
     static int[] camX, colAng, zbuf, wtop, wbot, rowDist, rowShd, skyCB, skyRI;
     static int proj, projY, hor;
@@ -676,7 +677,7 @@ final class E {
     /** Copy the render buffer to the screen, upscaling for low detail modes. */
     static void blit(Graphics g) {
         if (DX == 1 && DY == 1) {
-            g.drawRGB(buf, 0, RW, 0, 0, RW, RH, false);
+            g.drawRGB(buf, 0, RW, VX, VY, RW, RH, false);
             return;
         }
         int rowsPer = 16 / DY;
@@ -705,7 +706,7 @@ final class E {
             }
             int sy = y0 * DY, hgt = n * DY;
             if (sy + hgt > VH) hgt = VH - sy;
-            if (hgt > 0) g.drawRGB(st, 0, VW, 0, sy, VW, hgt, false);
+            if (hgt > 0) g.drawRGB(st, 0, VW, VX, VY + sy, VW, hgt, false);
         }
     }
 }

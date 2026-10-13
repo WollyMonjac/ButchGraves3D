@@ -12,7 +12,8 @@ import os, sys, struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SND = os.path.join(HERE, '..', 'res', 'snd')
-DEFAULT = ['m_boss.mid', 'm_boss2.mid', 'm_boss3.mid', 'm_boss4.mid', 'm_boss5.mid', 'm_level17.mid', 'm_level18.mid',
+# (not m_boss.mid: the Pumpkin King's track plays in full, as it did in the first version - it lost too much)
+DEFAULT = ['m_boss2.mid', 'm_boss3.mid', 'm_boss4.mid', 'm_boss5.mid', 'm_level17.mid', 'm_level18.mid',
            'm_level1.mid', 'm_win.mid']
 KICKS_HATS = {35, 36, 42, 44, 46, 69, 70, 82}     # kicks, hi-hats, cabasa, maracas, shaker
 

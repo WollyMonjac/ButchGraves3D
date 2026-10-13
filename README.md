@@ -117,7 +117,7 @@ The validator also draws a map preview to check by eye.
 - Claude can't listen to music, so it checked the tracks by rendering them through a General MIDI soundfont and
   measuring them: length, loudness and how busy they are. The human did the listening.
 - The busiest boss tracks were later thinned by a script, so the phone's synthesizer has CPU left over for sound
-  effects.
+  effects. The human found the thinned Pumpkin King theme lamer, so that one is back in full.
 
 **Sound effects** are synthesized in numpy as 8 kHz, 8-bit WAVs. They are built from noise bursts, pitch sweeps,
 envelopes, filters, distortion and a small echo. The revolver, for example, is a noise crack, a low boom and a pitch
@@ -139,10 +139,14 @@ drop, run through distortion and a short reverb.
 - **Memory.** The art is packed into one small pack that is always loaded, plus about 200 groups that load level by
   level. A level never holds more than about 390 KB of art at once.
 - **Screen sizes.** Menus, subtitles and the status bar size themselves to the screen and to the phone's own fonts.
+  Long lines wrap rather than being cut off. For slow phones, the 3D view can be shrunk as in Doom, with a border in
+  the episode's own textures, and it can render at half resolution.
 - **Cutscenes** are scripted in code and played in the game engine. Actors are ordinary sprites moved by the script,
   with camera moves, voices, subtitles and talking close-ups.
 - **Sound.** All phone audio runs on a background thread with a watchdog. The engine works around firmware that
-  deadlocks, hangs, runs out of channels or stops the music to play an effect.
+  deadlocks, hangs, runs out of channels or stops the music to play an effect. On phones that can't play an effect
+  over music at all, the two take turns. The music pauses for each effect and carries on from the same spot when it
+  ends. The game notices such a phone and switches to this by itself, and the player can also choose it in Options.
 
 ## How it was tested
 
@@ -162,12 +166,14 @@ so the real game logic runs on a PC.
   darts, spikes, the boulder, the rising mummy, the radio and the Other World.
 - **Shot tools** render real frames from the engine to PNG: posed scenes, secret walls mid-slide, and every weapon
   frame at several light levels. Claude looks at these, and they are also how the screenshots here were made.
+- **Speed** times the real renderer at every screen size and detail level, with the JVM's JIT compiler switched
+  off, which is closer to how a 2006 phone runs Java.
 
 **An emulator.** FreeJ2ME runs the real JAR headless, driven by scripts of key presses that also take screenshots. It
 was used to check menus, story pages, cutscenes, the full and lite builds, and screen sizes from 128×128 to
 240×320 and 320×240 landscape.
 
-**A fake phone audio system** (`test/snd`) stands in for the phone's sound API. It reproduces 12 failure modes of real
+**A fake phone audio system** (`test/snd`) stands in for the phone's sound API. It reproduces 15 failure modes of real
 phone firmware:
 
 - a mixer that deadlocks when music stops under an effect;
@@ -180,17 +186,23 @@ phone firmware:
 - music that hangs on start;
 - hangs with too many players;
 - the music's channel taken by an effect, at once or a moment later;
-- loop counts ignored.
+- only one audio stream, so any effect takes the music's;
+- loop counts ignored;
+- music that rewinds to the start when it is stopped;
+- an audio device only one player can hold, even when stopped.
 
-Three tests run the sound engine against every model:
+Four tests run the sound engine against every model, with effects and music mixed and taking turns:
 
 - **SndTest** checks dying and restarting.
 - **GunTest** checks that every shot of every gun is heard.
 - **BossTest** plays a minute of boss fight and reports which sounds were heard and how much of the time the music
   really played.
+- **ExploreTest** plays a minute of an ordinary level. For taking turns, it checks how much music is left and how
+  often it is cut into scraps, and that the music carries on where it stopped.
 
-**The build** compiles to Java 1.3 bytecode against MIDP/CLDC stubs, and ProGuard shrinks and preverifies it. The
-lite JAR's size is checked against the 1 MB limit.
+**The build** compiles to Java 1.3 bytecode against MIDP/CLDC stubs, and ProGuard shrinks and preverifies it. The JAR
+is then re-packed with Zopfli, which gives plain deflate about 5% smaller. The build stops if the lite JAR is over the
+1 MB limit.
 
 The human's playtesting covered what none of this could: how the game feels, sounds and plays on a real device.
 

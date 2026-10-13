@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 TC=${TC:-/home/claude/tc}
 J8=$TC/jdk8u422-b05/bin
 API=$TC/midp20_cldc10.jar
-VER=2.2.2
+VER=2.3.0
 NAME=ButchGraves3D
 RESDIR=res
 if [ "$LITE" = "1" ]; then
@@ -50,7 +50,10 @@ cat > build/pg.pro <<PG
 -keep,allowobfuscation class NL { static void lights(); }
 PG
 "$J8/java" -jar "$TC/proguard-7.4.2/lib/proguard.jar" @build/pg.pro > build/proguard.log 2>&1 || { cat build/proguard.log; exit 1; }
+# re-pack with Zopfli (plain deflate, about 5% smaller; skipped if python3 or the zopfli module is missing)
+python3 tools/zipmax.py dist/$NAME.jar || true
 SIZE=$(wc -c < dist/$NAME.jar | tr -d ' ')
+if [ "$LITE" = "1" ] && [ "$SIZE" -gt 1048576 ]; then echo "lite JAR is over 1 MB ($SIZE bytes): many phones refuse it" >&2; exit 1; fi
 cat > dist/$NAME.jad <<JAD
 MIDlet-1: Butch Graves 3D,/icon.png,BG
 MIDlet-Name: Butch Graves 3D

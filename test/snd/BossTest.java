@@ -18,6 +18,10 @@ public class BossTest {
         FakePlayer.modelY = model.indexOf('Y') >= 0;
         FakePlayer.modelZ = model.indexOf('Z') >= 0;
         FakePlayer.modelP = model.indexOf('P') >= 0;
+        FakePlayer.modelO = model.indexOf('O') >= 0;
+        FakePlayer.modelT = model.indexOf('T') >= 0;
+        FakePlayer.modelU = model.indexOf('U') >= 0;
+        Snd.fxTurns = System.getProperty("turns") != null;
         FakePlayer.modelQ = model.indexOf('Q') >= 0;
         FakePlayer.modelL = model.indexOf('L') >= 0;
         FakePlayer.modelD = model.indexOf('D') >= 0;
@@ -65,12 +69,19 @@ public class BossTest {
             else if (f[2].startsWith("s_")) other++;
             else if (f[2].startsWith("v_")) voices++;
         }
-        System.out.println("model " + pad(model, 3) + " MUSIC " + mus + "%  tommy " + heard + "/" + asked + " (" + (100 * heard / asked) + "%)  other effects " + other
+        System.out.println("model " + pad(model, 3) + " MUSIC " + mus + "%" + turnsInfo() + "  tommy " + heard + "/" + asked + " (" + (100 * heard / asked) + "%)  other effects " + other
                 + "  voices " + voices + "/" + painAsked + "+  wav players created " + Manager.wavCreates + "  hangs " + hangs
                 + "  music mode " + Snd.musicMode + (Snd.note != null ? " (" + Snd.note + ")" : "") + (Snd.musicDead ? " musicDead" : "")
                 + (Snd.sampledDead ? " sampledDead" : "") + " restarts " + Snd.restarts
                 + (FakePlayer.steals > 0 ? " stolen " + FakePlayer.steals : "") + (FakePlayer.loopEnds > 0 ? " loopEnds " + FakePlayer.loopEnds : ""));
         System.exit(0);
+    }
+
+    static String turnsInfo() {
+        return (Snd.turns() ? (Snd.autoTurns ? "  AUTO-TURNS" : "  TURNS") + " pauses " + Snd.musicPauses : "")
+                + (FakePlayer.resumes + FakePlayer.topStarts > 0 ? "  resumed " + FakePlayer.resumes + " fromTop " + FakePlayer.topStarts : "")
+                + (FakePlayer.seeks > 0 ? " seeks " + FakePlayer.seeks : "") + (Snd.deep ? " DEEP" : "")
+                + "  music stretches " + FakePlayer.segs + " (" + FakePlayer.shortSegs + " under 1 s)";
     }
 
     static String pad(String s, int n) { while (s.length() < n) s += " "; return s; }

@@ -61,26 +61,37 @@ Keys: `music.title, music.story, music.level1..level20, music.win, music.dead, m
   on their own: they take its channel for one effect too many, or ignore the loop count and stop at the end of the track.
   The engine notices (the player's state, and whether its media clock still runs), starts the music again where it
   stopped, and from then on plays only as many effects at once over it as the phone has channels for. When effects can't
-  play over the MIDI at all, they are skipped while music plays; when the audio hangs while both play, the effects back
+  play over the MIDI at all (an effect only starts once the music is stopped, or even a lone effect takes the music's
+  channel), music and effects take turns for the rest of the session: before a sampled sound starts the MIDI is stopped
+  right where it is (after any other sampled sound, never under one), and 0.3 s after the last one ends it starts again
+  from the same spot. If the phone rewound it, the engine seeks back; if stopping isn't enough to free the audio, the
+  MIDI also deallocates for each effect. The player can choose this in Options (FX + MUSIC: TAKE TURNS). When the audio
+  hangs while both play, the effects back
   off (fewer players, then none but the gun's and no voices over the music), never the music. Without music, effect
   hangs shrink the player pool and finally turn effects off for the session; music that hangs while starting gets
   another try on the next level, as does everything else. Opening a new effect player while the MIDI plays is the riskiest thing a phone
   does, so the engine rations it: your gun always gets one, getting hurt, pickups, explosions, bosses and traps may open
   one twice a second, and everything else (growls, hits, clicks) plays only if its player is already open or nothing has
   been opened for over a second; a busy sound in its first seconds is never evicted for a minor one. Butch's pain grunts
-  are spaced out too. In a minute of boss fight this opens about 60 players instead of about 180. The boss tracks and the
-  busiest level tracks are also thinned (`tools/thin_midi.py`: chords keep two notes, kick and hi-hats play eighths, 16th-note
+  are spaced out too. In a minute of boss fight this opens about 60 players instead of about 180. The boss tracks (except
+  the Pumpkin King's, which plays in full) and the busiest level tracks are also thinned (`tools/thin_midi.py`: chords keep two notes, kick and hi-hats play eighths, 16th-note
   riffs play eighths) so the phone's synth has CPU to spare for the effects; every part and melody is still there.
-  `test/snd/run.sh`, `test/snd/rungun.sh` and `test/snd/runboss.sh` (a minute of boss fight) check all this against a fake
-  MMAPI that models those phone failures (deadlocks, hangs, resource limits, no mixing, lost restarts, the music's channel
-  taken for an effect, loop counts ignored); `runboss.sh` reports how much of the fight the music really played.
+  `test/snd/run.sh`, `test/snd/rungun.sh`, `test/snd/runboss.sh` (a minute of boss fight) and `test/snd/runexplore.sh`
+  (a minute of an ordinary level) check all this against a fake MMAPI that models those phone failures (deadlocks, hangs,
+  resource limits, no mixing, lost restarts, the music's channel taken for an effect, one audio stream, loop counts
+  ignored, a MIDI that rewinds when stopped, an audio device only one player can hold); the boss and level tests report
+  how much of the time the music really played, in how many stretches, and whether it came back where it stopped.
+  Set `JOPT=-Dturns` to test with effects and music taking turns.
 - **Levels** (`tools/gen_levels*.py`): built in code, validated (enclosure, door orientation, key/exit reachability, including
   teleporters, both lever states of the shifting walls, jumps over pits, and the escape after the idol is lifted) and checked in a desktop simulator (`test/sim`) that runs a bot
   through every level at every difficulty.
 
 ## Building
 
-Requirements: JDK 8 (javac with `-source 1.3 -target 1.3`), a MIDP 2.0 / CLDC 1.0 API jar, ProGuard (for preverification).
+Requirements: JDK 8 (javac with `-source 1.3 -target 1.3`), a MIDP 2.0 / CLDC 1.0 API jar, ProGuard (for preverification),
+and Python 3 with `pip install zopfli`. After ProGuard, `tools/zipmax.py` re-packs the JAR with Zopfli, which is plain
+deflate that any phone can read, only about 5% smaller. The lite JAR needs that to stay under 1 MB, and the build stops
+if it doesn't.
 
 ```
 ./build.sh            # full version  -> dist/ButchGraves3D.jar/.jad
@@ -106,4 +117,5 @@ python3 gen_audio4.py      # episode 5 audio, and the full sounds.txt
 ```
 
 The pictures in the manual are made by `tools/manual_maps.py` (the level maps, from the level builders) and
-`tools/manual_art.py` (the sprite tiles, from `tools/spr`).
+`tools/manual_art.py` (the sprite tiles, from `tools/spr`), and `tools/manual_pdf.py` prints `MANUAL.md` to
+`docs/MANUAL.pdf` with headless Chromium.
